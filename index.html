@@ -1751,7 +1751,8 @@ async function renderSettings() {
     } else {
       statusEl.textContent = 'Cloud unreachable';
       statusEl.className = 'text-xs font-medium px-2 py-0.5 rounded-full bg-alert-500/10 text-alert-500';
-      descEl.textContent = 'Configured correctly but unable to contact Supabase. Check your URL/key, policies, and that the clients/transactions tables exist.';
+      const errorMessage = supabaseConnectionError?.message ? ` (${supabaseConnectionError.message})` : '';
+      descEl.textContent = `Configured correctly but unable to contact Supabase. Check your URL/key, policies, and that the clients/transactions tables exist.${errorMessage}`;
     }
   } else {
     statusEl.textContent = 'Not connected';
