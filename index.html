@@ -1,0 +1,2073 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
+<title>Uncle Atto's Savings App</title>
+<meta name="theme-color" content="#0B1A2B">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Tailwind (Play CDN) -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Dexie.js (IndexedDB wrapper) -->
+<script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<!-- html2pdf.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<!-- ================= Cloud sync (Supabase) =================
+     This SDK powers real, live, multi-device sync: changes made on one phone
+     appear on every other device signed into the same project within a second
+     or two. It only activates once you paste your own project URL and anon
+     key into CONFIG near the top of the main script — see the Settings tab
+     in the app for the exact 2-minute setup steps and the SQL to run once. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          display: ['"Space Grotesk"', 'sans-serif'],
+          body: ['"Inter"', 'sans-serif'],
+          mono: ['"IBM Plex Mono"', 'monospace'],
+        },
+        colors: {
+          ink:      { DEFAULT: '#0B1A2B', 50:'#F2F5F7', 100:'#E4E9EE', 700:'#16283D', 800:'#101E30', 900:'#0B1A2B' },
+          paper:    '#F5F7F8',
+          ledger:   { 500:'#1E5B8C', 600:'#184A72', 700:'#123859' },
+          savings:  { 500:'#0F9D74', 600:'#0C8362' },
+          loan:     { 500:'#C77D2A', 600:'#A8651E' },
+          alert:    { 500:'#D0503A' },
+        },
+        boxShadow: {
+          tab: '0 -2px 12px rgba(11,26,43,0.08)',
+        }
+      }
+    }
+  }
+</script>
+
+<style>
+  html, body { -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Inter', sans-serif; background:#F5F7F8; }
+  .dark body { background:#0B1A2B; }
+  .font-display { font-family: 'Space Grotesk', sans-serif; }
+  .font-mono-num { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+
+  /* app shell — a phone-width "passbook" even on desktop */
+  #app-shell { max-width: 480px; margin: 0 auto; min-height: 100vh; position: relative; }
+  @media (min-width: 481px) {
+    #app-shell { box-shadow: 0 0 60px rgba(11,26,43,0.12); }
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgba(30,91,140,0.3); border-radius: 4px; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  .tap { min-height: 48px; }
+
+  /* Perforated / ticket edge for the receipt component — signature element */
+  .receipt-edge {
+    position: relative;
+  }
+  .receipt-edge::before, .receipt-edge::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0;
+    height: 12px;
+    background-image: radial-gradient(circle at 8px 6px, transparent 6px, currentColor 6.5px);
+    background-size: 16px 12px;
+    background-repeat: repeat-x;
+    color: #F5F7F8;
+  }
+  .dark .receipt-edge::before, .dark .receipt-edge::after { color: #0B1A2B; }
+  .receipt-edge::before { top: -1px; transform: rotate(180deg); }
+  .receipt-edge::after { bottom: -1px; }
+
+  .switch { width: 44px; height: 26px; }
+  .switch-dot { transition: transform .18s ease; }
+  input:checked ~ .switch-track { background: #0F9D74; }
+  input:checked ~ .switch-track .switch-dot { transform: translateX(18px); }
+
+  .nav-btn.active-nav { color: #1E5B8C; }
+  .dark .nav-btn.active-nav { color: #7CB4E3; }
+  .nav-btn.active-nav .nav-dot { opacity: 1; }
+
+  @keyframes rise { from { opacity:0; transform: translateY(8px);} to { opacity:1; transform: translateY(0);} }
+  .rise { animation: rise .25s ease both; }
+
+  input[type="date"]::-webkit-calendar-picker-indicator { opacity: 0.6; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+
+  .modal-backdrop { backdrop-filter: blur(2px); }
+
+  #splash-screen {
+    position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center;
+    padding: 24px; background: linear-gradient(135deg, #0B1A2B 0%, #1E5B8C 52%, #0F9D74 100%);
+    color: white; overflow: hidden;
+  }
+  #splash-screen.hidden { opacity: 0; transform: scale(1.02); pointer-events: none; transition: all 0.45s ease; }
+  .splash-card {
+    width: min(100%, 360px); text-align: center; background: rgba(255,255,255,0.14); backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.18); border-radius: 28px; padding: 26px 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.22);
+  }
+  .splash-logo {
+    width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center;
+    background: linear-gradient(135deg, #1E5B8C, #0F9D74); font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.24);
+  }
+  .splash-bar { margin-top: 16px; height: 8px; border-radius: 999px; background: rgba(255,255,255,0.2); overflow: hidden; }
+  .splash-bar span { display: block; height: 100%; width: 30%; border-radius: inherit; background: linear-gradient(90deg, #ffffff, #d9f5ea); animation: splash-load 1.2s ease-in-out infinite; }
+  @keyframes splash-load { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
+
+  #login-overlay {
+    position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+    padding: 20px; background: linear-gradient(135deg, #0B1A2B 0%, #1E5B8C 100%);
+  }
+  .login-card {
+    width: min(100%, 420px); border-radius: 24px; background: rgba(255,255,255,0.97); color: #0B1A2B;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.25); padding: 22px 18px 18px; text-align: center;
+  }
+  .dark .login-card {
+    background: rgba(11,26,43,0.94); color: #F5F7F8; box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+  }
+  .login-card input {
+    width: 100%; border: 1px solid #d7e0e7; border-radius: 14px; padding: 12px 14px; margin-top: 10px; font-size: 15px; outline: none; background: white; color: #0B1A2B;
+  }
+  .dark .login-card input {
+    background: #0F172A; border-color: #334155; color: #F5F7F8;
+  }
+  .login-card input:focus { border-color: #1E5B8C; box-shadow: 0 0 0 3px rgba(30,91,140,0.15); }
+  .login-btn {
+    flex: 1; border: none; border-radius: 14px; padding: 12px 14px; margin-top: 12px; background: linear-gradient(90deg, #1E5B8C, #0F9D74);
+    color: white; font-weight: 700; font-size: 15px;
+  }
+  .login-secondary-btn {
+    flex: 1; border: none; border-radius: 14px; padding: 12px 14px; margin-top: 12px; background: #E4E9EE; color: #0B1A2B; font-weight: 700; font-size: 15px;
+  }
+  .dark .login-secondary-btn { background: #16283D; color: #F5F7F8; }
+  .login-helper { font-size: 12px; color: #64748b; margin-top: 10px; line-height: 1.5; }
+  .dark .login-helper { color: #CBD5E1; }
+  .login-error { min-height: 20px; margin-top: 10px; color: #D0503A; font-size: 13px; font-weight: 600; }
+  .login-card.shake { animation: login-shake 0.35s ease-in-out; }
+  @keyframes login-shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-7px)} 50%{transform:translateX(7px)} 75%{transform:translateX(-4px)} }
+</style>
+</head>
+<body class="text-ink-900 dark:text-paper">
+<div id="splash-screen">
+  <div class="splash-card">
+    <div class="splash-logo">LF</div>
+    <h2 class="font-display text-xl font-semibold">Uncle Atto's Savings App</h2>
+    <p class="text-sm opacity-90 mt-2">Preparing a secure and polished savings experience…</p>
+    <div class="splash-bar"><span></span></div>
+  </div>
+</div>
+
+<div id="login-overlay" style="display:none;">
+  <div class="login-card">
+    <div class="flex justify-end">
+      <button id="theme-toggle-auth" class="tap rounded-full px-3 py-2 text-sm font-medium border border-ink-100 dark:border-ink-700" type="button">🌙 Dark</button>
+    </div>
+    <div class="w-14 h-14 rounded-2xl mx-auto mt-2 mb-3 flex items-center justify-center text-white font-display font-semibold text-lg" style="background: linear-gradient(135deg, #1E5B8C, #0F9D74);">LF</div>
+    <h2 class="font-display text-xl font-semibold">Secure Access</h2>
+    <p class="text-sm mt-2" style="color: inherit; opacity: 0.8;">Please enter your credentials to continue.</p>
+    <input id="login-username" type="text" placeholder="Username">
+    <input id="login-password" type="password" placeholder="Password">
+    <div class="flex gap-2">
+      <button id="login-submit" class="login-btn" type="button">Access App</button>
+      <button id="login-save" class="login-secondary-btn" type="button">Save</button>
+    </div>
+    <div id="login-error" class="login-error"></div>
+    <p class="login-helper">For more information, contact Gliffits Amponsah - 0599888073</p>
+  </div>
+</div>
+
+<div id="app-shell" class="bg-paper dark:bg-ink-900 flex flex-col" style="display:none;">
+
+  <!-- ============ TOP BAR ============ -->
+  <header class="sticky top-0 z-30 bg-paper/90 dark:bg-ink-900/90 backdrop-blur border-b border-ink-100 dark:border-ink-700">
+    <div class="flex items-center justify-between px-4 h-16">
+      <div class="flex items-center gap-2">
+        <div class="w-9 h-9 rounded-lg bg-ledger-500 flex items-center justify-center text-white font-display font-semibold text-sm">UA</div>
+        <div>
+          <p class="font-display font-semibold text-[15px] leading-none">Uncle Atto's Savings App</p>
+          <p id="online-badge" class="text-[11px] leading-none mt-1 text-savings-500 font-medium">● Online</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button id="theme-toggle" class="tap w-11 h-11 rounded-full flex items-center justify-center bg-ink-50 dark:bg-ink-700 text-lg" aria-label="Toggle dark mode">🌓</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ MAIN CONTENT ============ -->
+  <main class="flex-1 pb-24">
+
+    <!-- ---------- HOME / DASHBOARD ---------- -->
+    <section id="view-home" class="view active px-4 pt-4 space-y-5">
+      <div>
+        <p class="text-sm text-ink-900/60 dark:text-paper/60">Total gross collections</p>
+        <div class="grid grid-cols-2 gap-3 mt-2">
+          <div class="rounded-2xl bg-ledger-500 text-white p-4">
+            <p class="text-xs opacity-80">Today</p>
+            <p id="stat-today" class="font-mono-num text-xl font-semibold mt-1">GH₵0.00</p>
+          </div>
+          <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4">
+            <p class="text-xs text-ink-900/60 dark:text-paper/60">Yesterday</p>
+            <p id="stat-yesterday" class="font-mono-num text-xl font-semibold mt-1">GH₵0.00</p>
+          </div>
+          <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4">
+            <p class="text-xs text-ink-900/60 dark:text-paper/60">This week</p>
+            <p id="stat-week" class="font-mono-num text-xl font-semibold mt-1">GH₵0.00</p>
+          </div>
+          <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4">
+            <p class="text-xs text-ink-900/60 dark:text-paper/60">This month</p>
+            <p id="stat-month" class="font-mono-num text-xl font-semibold mt-1">GH₵0.00</p>
+          </div>
+        </div>
+        <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4 mt-3 flex items-center justify-between">
+          <p class="text-xs text-ink-900/60 dark:text-paper/60">Year to date</p>
+          <p id="stat-year" class="font-mono-num text-lg font-semibold">GH₵0.00</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rounded-2xl border border-savings-500/30 bg-savings-500/10 p-4">
+          <p class="text-xs font-medium text-savings-600 dark:text-savings-500">Client savings held</p>
+          <p id="stat-total-savings" class="font-mono-num text-lg font-semibold mt-1">GH₵0.00</p>
+        </div>
+        <div class="rounded-2xl border border-loan-500/30 bg-loan-500/10 p-4">
+          <p class="text-xs font-medium text-loan-600 dark:text-loan-500">Outstanding loans</p>
+          <p id="stat-total-loans" class="font-mono-num text-lg font-semibold mt-1">GH₵0.00</p>
+        </div>
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="font-display font-semibold text-base">New transaction</h2>
+        </div>
+        <button id="btn-new-txn" class="tap w-full rounded-2xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 font-medium flex items-center justify-center gap-2">
+          <span class="text-lg leading-none">+</span> Record a transaction
+        </button>
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="font-display font-semibold text-base">Clients</h2>
+          <button id="btn-add-client" class="text-sm text-ledger-500 font-medium">+ Add client</button>
+        </div>
+        <div id="client-list" class="space-y-2"></div>
+      </div>
+    </section>
+
+    <!-- ---------- CLIENT PROFILE ---------- -->
+    <section id="view-client" class="view px-4 pt-4 space-y-4">
+      <div class="flex items-center justify-between">
+        <button id="btn-back-client" class="text-sm text-ledger-500 font-medium">&larr; Back</button>
+        <button id="btn-edit-client" class="text-sm text-ledger-500 font-medium">Edit profile</button>
+      </div>
+      <div id="client-profile-header" class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rounded-2xl border border-savings-500/30 bg-savings-500/10 p-4">
+          <p class="text-xs font-medium text-savings-600 dark:text-savings-500">Savings balance</p>
+          <p id="client-savings-total" class="font-mono-num text-lg font-semibold mt-1">GH₵0.00</p>
+        </div>
+        <div class="rounded-2xl border border-loan-500/30 bg-loan-500/10 p-4">
+          <p class="text-xs font-medium text-loan-600 dark:text-loan-500">Active debt</p>
+          <p id="client-loan-total" class="font-mono-num text-lg font-semibold mt-1">GH₵0.00</p>
+        </div>
+      </div>
+      <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4 flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium">Loan eligibility</p>
+          <p class="text-xs text-ink-900/60 dark:text-paper/60">Allows loan disbursal for this client</p>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input id="client-loan-toggle" type="checkbox" class="sr-only peer">
+          <div class="switch switch-track relative bg-ink-100 dark:bg-ink-800 rounded-full transition-colors">
+            <div class="switch-dot absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow"></div>
+          </div>
+        </label>
+      </div>
+      <div>
+        <h3 class="font-display font-semibold text-base mb-2">Transaction timeline</h3>
+        <div id="client-timeline" class="space-y-2"></div>
+      </div>
+    </section>
+
+    <!-- ---------- TRANSACTIONS / LEDGER ---------- -->
+    <section id="view-transactions" class="view px-4 pt-4 space-y-4">
+      <div class="flex items-center justify-between mb-1">
+        <div>
+          <h2 class="font-display font-semibold text-lg">Statement ledger</h2>
+          <p class="text-xs text-ink-900/60 dark:text-paper/60">Filter by person, amount, date, and transaction type.</p>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-3 space-y-2">
+        <input id="f-search" type="text" placeholder="Search client or note" class="tap w-full text-sm rounded-xl px-3 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+        <div class="grid grid-cols-2 gap-2">
+          <select id="f-client" class="tap text-sm rounded-xl px-3 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+            <option value="">All clients</option>
+          </select>
+          <select id="f-type" class="tap text-sm rounded-xl px-3 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+            <option value="">All types</option>
+            <option value="deposit">Savings deposit</option>
+            <option value="withdrawal">Savings withdrawal</option>
+            <option value="disbursal">Loan disbursal</option>
+            <option value="repayment">Loan repayment</option>
+          </select>
+          <select id="f-sync" class="tap text-sm rounded-xl px-3 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+            <option value="">Any sync status</option>
+            <option value="synced">Synced</option>
+            <option value="pending">Pending</option>
+          </select>
+          <div class="grid grid-cols-2 gap-2">
+            <input id="f-min" type="number" placeholder="Min amount" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700 w-full">
+            <input id="f-max" type="number" placeholder="Max amount" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700 w-full">
+          </div>
+          <input id="f-from" type="date" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+          <input id="f-to" type="date" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+        </div>
+        <div class="flex flex-wrap gap-2 pt-1">
+          <button id="btn-clear-filters" class="tap flex-1 min-w-[120px] text-sm rounded-xl border border-ink-100 dark:border-ink-700">Reset</button>
+          <button id="btn-preview-pdf" class="tap flex-1 min-w-[120px] text-sm rounded-xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 font-medium">Preview statement</button>
+          <button id="btn-export-pdf" class="tap flex-1 min-w-[120px] text-sm rounded-xl bg-ledger-500 text-white font-medium">Export statement PDF</button>
+        </div>
+      </div>
+
+      <div id="ledger-export-area" class="rounded-2xl bg-white dark:bg-ink-800 p-2">
+        <div id="ledger-list" class="space-y-2"></div>
+      </div>
+    </section>
+
+    <!-- ---------- ANALYTICS ---------- -->
+    <section id="view-analytics" class="view px-4 pt-4 space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+        <div>
+          <h2 class="font-display font-semibold text-lg">Performance analytics</h2>
+          <p class="text-xs text-ink-900/60 dark:text-paper/60">Track savings activity by person, range, and amount.</p>
+        </div>
+        <div class="flex gap-2">
+          <button id="btn-preview-chart" class="tap rounded-xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 px-3 text-sm font-medium">Preview analytics</button>
+          <button id="btn-export-chart" class="tap rounded-xl bg-ledger-500 text-white px-3 text-sm font-medium">Export chart PDF</button>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-3 space-y-2">
+        <div class="grid grid-cols-2 gap-2">
+          <select id="a-client" class="tap text-sm rounded-xl px-3 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+            <option value="">All clients</option>
+          </select>
+          <select id="a-type" class="tap text-sm rounded-xl px-3 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+            <option value="">All types</option>
+            <option value="deposit">Deposit</option>
+            <option value="withdrawal">Withdrawal</option>
+            <option value="disbursal">Disbursal</option>
+            <option value="repayment">Repayment</option>
+          </select>
+          <input id="a-from" type="date" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+          <input id="a-to" type="date" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+          <input id="a-min" type="number" placeholder="Min amount" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+          <input id="a-max" type="number" placeholder="Max amount" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+        </div>
+      </div>
+
+      <div id="analytics-export-area" class="space-y-4">
+        <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-sm font-medium">Daily activity trend</p>
+            <span id="analytics-summary" class="text-xs text-ink-900/60 dark:text-paper/60">0 records</span>
+          </div>
+          <canvas id="chart-activity" height="200"></canvas>
+        </div>
+        <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4">
+          <p class="text-sm font-medium mb-3">Movement breakdown</p>
+          <canvas id="chart-breakdown" height="180"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- SETTINGS ---------- -->
+    <section id="view-settings" class="view px-4 pt-4 space-y-4">
+      <h2 class="font-display font-semibold text-lg">Settings</h2>
+      <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <p class="text-sm">Appearance</p>
+          <span id="settings-theme-label" class="text-sm text-ink-900/60 dark:text-paper/60">Light</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <p class="text-sm">Network status</p>
+          <span id="settings-online" class="text-sm font-medium">Online</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <p class="text-sm">Unsynced records</p>
+          <span id="settings-pending" class="text-sm font-medium">0</span>
+        </div>
+        <button id="btn-force-sync" class="tap w-full rounded-xl bg-ledger-500 text-white text-sm font-medium">Sync now</button>
+      </div>
+      <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4 space-y-2">
+        <div class="flex items-center justify-between">
+          <p class="text-sm font-medium">Multi-device sync</p>
+          <span id="settings-cloud-status" class="text-xs font-medium px-2 py-0.5 rounded-full bg-alert-500/10 text-alert-500">Not connected</span>
+        </div>
+        <p id="settings-cloud-desc" class="text-xs text-ink-900/60 dark:text-paper/60 leading-relaxed">
+          Supabase sync is configured to keep clients, transactions, hidden status, photos, and server-backed login information synchronized across devices.
+        </p>
+
+  type text, amount numeric, note text,
+  timestamp timestamptz, updated_at timestamptz default now()
+);
+alter table clients enable row level security;
+alter table transactions enable row level security;
+create policy "field agent access" on clients for all using (true) with check (true);
+create policy "field agent access" on transactions for all using (true) with check (true);
+alter publication supabase_realtime add table clients, transactions;</pre>
+          <p class="mt-2">These policies allow anyone with your anon key to read/write — fine for a small trusted team, but add real authentication before wider rollout.</p>
+        </details>
+      </div>
+      <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4 space-y-2">
+        <div class="flex items-center justify-between">
+          <p class="text-sm font-medium">Archived clients</p>
+          <span id="settings-archived-count" class="text-xs font-medium px-2 py-0.5 rounded-full bg-savings-500/10 text-savings-500">0</span>
+        </div>
+        <p class="text-[11px] text-ink-900/50 dark:text-paper/50">Hidden clients are stored here. Open Settings and restore any person you want back into the active list.</p>
+        <div id="archived-clients-list" class="space-y-2"></div>
+      </div>
+      <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4 space-y-2">
+        <p class="text-sm font-medium">Currency</p>
+        <select id="settings-currency" class="tap w-full text-sm rounded-xl px-3 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+          <option value="GH₵">GH₵ — Ghanaian Cedi</option>
+        </select>
+      </div>
+      <div class="rounded-2xl bg-alert-500/10 border border-alert-500/30 p-4">
+        <p class="text-sm font-medium text-alert-500 mb-2">Danger zone</p>
+        <button id="btn-reset-data" class="tap w-full rounded-xl border border-alert-500 text-alert-500 text-sm font-medium">Clear all data</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ BOTTOM NAV ============ -->
+  <nav class="fixed bottom-0 left-0 right-0 z-30">
+    <div id="app-shell-nav" class="max-w-[480px] mx-auto bg-paper/95 dark:bg-ink-900/95 backdrop-blur border-t border-ink-100 dark:border-ink-700 shadow-tab flex">
+      <button data-view="home" class="nav-btn active-nav tap flex-1 flex flex-col items-center justify-center gap-0.5 py-2">
+        <span class="text-xl leading-none">🏠</span>
+        <span class="text-[11px] font-medium">Home</span>
+        <span class="nav-dot w-1 h-1 rounded-full bg-ledger-500 opacity-0"></span>
+      </button>
+      <button data-view="transactions" class="nav-btn tap flex-1 flex flex-col items-center justify-center gap-0.5 py-2">
+        <span class="text-xl leading-none">📒</span>
+        <span class="text-[11px] font-medium">Ledger</span>
+        <span class="nav-dot w-1 h-1 rounded-full bg-ledger-500 opacity-0"></span>
+      </button>
+      <button data-view="analytics" class="nav-btn tap flex-1 flex flex-col items-center justify-center gap-0.5 py-2">
+        <span class="text-xl leading-none">📊</span>
+        <span class="text-[11px] font-medium">Analytics</span>
+        <span class="nav-dot w-1 h-1 rounded-full bg-ledger-500 opacity-0"></span>
+      </button>
+      <button data-view="settings" class="nav-btn tap flex-1 flex flex-col items-center justify-center gap-0.5 py-2">
+        <span class="text-xl leading-none">⚙️</span>
+        <span class="text-[11px] font-medium">Settings</span>
+        <span class="nav-dot w-1 h-1 rounded-full bg-ledger-500 opacity-0"></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ============ MODAL: NEW TRANSACTION ============ -->
+  <div id="modal-txn" class="fixed inset-0 z-40 hidden items-end justify-center modal-backdrop bg-ink-900/40">
+    <div class="w-full max-w-[480px] bg-paper dark:bg-ink-800 rounded-t-3xl p-5 pb-8 rise max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-display font-semibold text-lg">Record transaction</h3>
+        <button id="close-txn" class="tap w-9 h-9 rounded-full bg-ink-50 dark:bg-ink-700" aria-label="Close">✕</button>
+      </div>
+      <form id="form-txn" class="space-y-3">
+        <div>
+          <label class="text-xs font-medium text-ink-900/60 dark:text-paper/60">Client</label>
+          <select id="txn-client" required class="tap w-full mt-1 rounded-xl px-3 bg-ink-50 dark:bg-ink-700 border border-ink-100 dark:border-ink-700"></select>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-ink-900/60 dark:text-paper/60">Transaction type</label>
+          <div class="grid grid-cols-2 gap-2 mt-1">
+            <button type="button" data-type="deposit" class="txn-type-btn tap rounded-xl border border-savings-500 text-savings-600 dark:text-savings-500 text-sm font-medium">Savings deposit</button>
+            <button type="button" data-type="withdrawal" class="txn-type-btn tap rounded-xl border border-ink-100 dark:border-ink-700 text-sm font-medium">Savings withdrawal</button>
+            <button type="button" data-type="disbursal" class="txn-type-btn tap rounded-xl border border-ink-100 dark:border-ink-700 text-sm font-medium">Loan disbursal</button>
+            <button type="button" data-type="repayment" class="txn-type-btn tap rounded-xl border border-ink-100 dark:border-ink-700 text-sm font-medium">Loan repayment</button>
+          </div>
+          <p id="txn-type-hint" class="text-[11px] text-alert-500 mt-1 hidden">This client is not marked loan eligible. Enable it on their profile first.</p>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-ink-900/60 dark:text-paper/60">Amount</label>
+          <input id="txn-amount" type="number" min="0.01" step="0.01" required placeholder="0.00" class="tap w-full mt-1 rounded-xl px-3 font-mono-num bg-ink-50 dark:bg-ink-700 border border-ink-100 dark:border-ink-700">
+        </div>
+        <div>
+          <label class="text-xs font-medium text-ink-900/60 dark:text-paper/60">Note (optional)</label>
+          <input id="txn-note" type="text" placeholder="e.g. weekly collection" class="tap w-full mt-1 rounded-xl px-3 bg-ink-50 dark:bg-ink-700 border border-ink-100 dark:border-ink-700">
+        </div>
+        <p class="text-[11px] text-ink-900/50 dark:text-paper/50">Timestamp is captured automatically at the moment you save and cannot be edited.</p>
+        <button type="submit" class="tap w-full rounded-xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 font-medium mt-2">Save transaction</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ MODAL: ADD / EDIT CLIENT ============ -->
+  <div id="modal-client" class="fixed inset-0 z-40 hidden items-end justify-center modal-backdrop bg-ink-900/40">
+    <div class="w-full max-w-[480px] bg-paper dark:bg-ink-800 rounded-t-3xl p-5 pb-8 rise max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 id="client-modal-title" class="font-display font-semibold text-lg">Add client</h3>
+        <button id="close-client" class="tap w-9 h-9 rounded-full bg-ink-50 dark:bg-ink-700" aria-label="Close">✕</button>
+      </div>
+      <form id="form-client" class="space-y-3">
+        <div class="flex items-center gap-3">
+          <div id="client-photo-preview" class="w-16 h-16 rounded-full bg-ink-50 dark:bg-ink-700 flex items-center justify-center text-ink-900/30 dark:text-paper/30 text-2xl shrink-0 overflow-hidden">📷</div>
+          <div class="flex-1">
+            <label class="text-xs font-medium text-ink-900/60 dark:text-paper/60">Photo (optional)</label>
+           <input id="client-photo-input" type="file" accept="image/*" class="tap w-full mt-1 text-xs file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-ink-100 dark:file:bg-ink-800 file:text-xs">
+            <button type="button" id="client-photo-remove" class="text-[11px] text-alert-500 mt-1 hidden">Remove photo</button>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-ink-900/60 dark:text-paper/60">Full name</label>
+          <input id="client-name" type="text" required class="tap w-full mt-1 rounded-xl px-3 bg-ink-50 dark:bg-ink-700 border border-ink-100 dark:border-ink-700">
+        </div>
+        <div>
+          <label class="text-xs font-medium text-ink-900/60 dark:text-paper/60">Phone (with country code)</label>
+          <input id="client-phone" type="tel" required placeholder="e.g. 233241234567" class="tap w-full mt-1 rounded-xl px-3 font-mono-num bg-ink-50 dark:bg-ink-700 border border-ink-100 dark:border-ink-700">
+        </div>
+        <div>
+          <label class="text-xs font-medium text-ink-900/60 dark:text-paper/60">Location</label>
+          <input id="client-location" type="text" placeholder="e.g. Accra, Ghana" class="tap w-full mt-1 rounded-xl px-3 bg-ink-50 dark:bg-ink-700 border border-ink-100 dark:border-ink-700">
+        </div>
+        <label class="flex items-center gap-2 pt-1">
+          <input id="client-eligible" type="checkbox" class="w-5 h-5 rounded">
+          <span class="text-sm">Loan eligible from the start</span>
+        </label>
+        <label class="flex items-center gap-2 pt-1">
+          <input id="client-hidden" type="checkbox" class="w-5 h-5 rounded">
+          <span class="text-sm">Hide this client from active lists</span>
+        </label>
+        <button type="submit" id="client-form-submit" class="tap w-full rounded-xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 font-medium mt-2">Save client</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ MODAL: WHATSAPP RECEIPT ============ -->
+  <div id="modal-export-preview" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop bg-ink-900/70 px-4">
+    <div class="w-full max-w-[940px] bg-paper dark:bg-ink-800 rounded-3xl p-4 rise max-h-[90vh] overflow-hidden">
+      <div class="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <p class="font-display font-semibold text-lg">Export preview</p>
+          <p class="text-xs text-ink-900/60 dark:text-paper/60">Review the PDF content here before downloading.</p>
+        </div>
+        <button id="close-export-preview" class="tap w-10 h-10 rounded-full bg-ink-50 dark:bg-ink-700 text-lg">✕</button>
+      </div>
+      <div id="export-preview-body" class="overflow-y-auto max-h-[72vh] rounded-3xl border border-ink-100 dark:border-ink-700 bg-white dark:bg-ink-900 p-4"></div>
+      <div class="flex gap-2 mt-4">
+        <button id="export-preview-download" class="tap flex-1 rounded-xl bg-ledger-500 text-white text-sm font-medium py-3">Download PDF</button>
+        <button id="export-preview-close" class="tap flex-1 rounded-xl border border-ink-100 dark:border-ink-700 text-sm font-medium py-3">Close preview</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-receipt" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop bg-ink-900/50 px-4">
+    <div class="w-full max-w-[380px] rise">
+      <div class="bg-white dark:bg-ink-800 text-ink-900 dark:text-paper receipt-edge px-5 py-7 font-mono-num text-sm">
+        <p class="text-center font-display font-semibold text-base mb-1">Uncle Atto's Savings App</p>
+        <p class="text-center text-[11px] text-ink-900/50 dark:text-paper/50 mb-4">Digital transaction receipt</p>
+        <div class="border-t border-dashed border-ink-900/20 dark:border-paper/20 my-2"></div>
+        <div class="space-y-1 text-[13px]" id="receipt-body"></div>
+        <div class="border-t border-dashed border-ink-900/20 dark:border-paper/20 my-3"></div>
+        <label class="block text-[11px] font-body text-ink-900/60 dark:text-paper/60 mb-1">Note to customer</label>
+        <textarea id="receipt-note" rows="2" class="w-full font-body text-sm rounded-lg px-2 py-1.5 bg-ink-50 dark:bg-ink-700 border border-ink-100 dark:border-ink-700"></textarea>
+        <label class="block text-[11px] font-body text-ink-900/60 dark:text-paper/60 mt-2 mb-1">Send to (WhatsApp number, with country code)</label>
+        <input id="receipt-phone" type="tel" value="233" class="w-full font-mono-num text-sm rounded-lg px-2 py-1.5 bg-ink-50 dark:bg-ink-700 border border-ink-100 dark:border-ink-700">
+        <p id="receipt-phone-hint" class="text-[11px] font-body text-alert-500 mt-1 hidden">Add a full number with country code (no + or spaces needed) to enable sending.</p>
+      </div>
+      <div class="flex gap-2 mt-3">
+        <button id="close-receipt" class="tap flex-1 rounded-xl bg-ink-50 dark:bg-ink-700 font-body text-sm font-medium">Dismiss</button>
+        <a id="send-receipt" href="#" target="_blank" rel="noopener noreferrer" class="tap flex-1 rounded-xl bg-savings-500 text-white font-body text-sm font-medium flex items-center justify-center gap-1.5">Send via WhatsApp</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- toast -->
+  <div id="toast" class="fixed left-1/2 -translate-x-1/2 bottom-24 z-50 hidden px-4 py-2.5 rounded-xl bg-ink-900 text-paper text-sm font-medium shadow-lg max-w-[90%] text-center"></div>
+</div>
+
+<script>
+/* =========================================================================
+   CONFIG — replace with real project keys to enable live cloud sync.
+   Nothing else in this file needs to change once these are filled in.
+========================================================================= */
+const CONFIG = {
+  SUPABASE_URL: 'https://pzxzjckkfynotozzcbyw.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_fX1F_s060uH5ElZEg9TFMA_9NxxBapH'
+};
+
+function isCloudConfigured() {
+  return !!CONFIG.SUPABASE_URL && !!CONFIG.SUPABASE_ANON_KEY
+    && !CONFIG.SUPABASE_URL.includes('YOUR-PROJECT')
+    && !CONFIG.SUPABASE_ANON_KEY.includes('YOUR_SUPABASE_ANON_KEY');
+}
+let supabaseClient = null;
+
+/* =========================================================================
+   DATABASE (Dexie / IndexedDB)
+========================================================================= */
+const db = new Dexie('UncleAttoSavingsDB');
+db.version(1).stores({
+  clients: 'id, name, loanEligible',
+  transactions: 'id, clientId, type, timestamp, synced',
+});
+db.version(2).stores({
+  clients: 'id, name, loanEligible, synced',
+  transactions: 'id, clientId, type, timestamp, synced',
+});
+db.version(3).stores({
+  clients: 'id, name, phone, location, loanEligible, hidden, synced',
+  transactions: 'id, clientId, type, timestamp, synced',
+});
+
+/* =========================================================================
+   STATE & HELPERS
+========================================================================= */
+let CURRENCY = localStorage.getItem('lf_currency') || 'GH₵';
+let currentClientId = null;
+let selectedTxnType = 'deposit';
+let charts = { week: null, ratio: null };
+
+const uid = () => 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+const fmtMoney = (n) => `${CURRENCY}${(Math.round((n + Number.EPSILON) * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtDate = (iso) => new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+const daysAgo = (n) => { const x = new Date(); x.setDate(x.getDate() - n); return x; };
+
+const TYPE_META = {
+  deposit:    { label: 'Savings deposit',    sign: 1,  cls: 'text-savings-600 dark:text-savings-500', bg: 'bg-savings-500/10 border-savings-500/30', icon: '↓' },
+  withdrawal: { label: 'Savings withdrawal', sign: -1, cls: 'text-alert-500', bg: 'bg-alert-500/10 border-alert-500/30', icon: '↑' },
+  disbursal:  { label: 'Loan disbursal',     sign: 1,  cls: 'text-loan-600 dark:text-loan-500', bg: 'bg-loan-500/10 border-loan-500/30', icon: '↓' },
+  repayment:  { label: 'Loan repayment',     sign: -1, cls: 'text-savings-600 dark:text-savings-500', bg: 'bg-savings-500/10 border-savings-500/30', icon: '↑' },
+};
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(toast._h);
+  toast._h = setTimeout(() => t.classList.add('hidden'), 2200);
+}
+
+/* =========================================================================
+   DATABASE STARTS EMPTY — no mock/demo records are ever inserted.
+   The app is fully live from first load; every client and transaction
+   shown is one a real agent entered.
+========================================================================= */
+
+/* =========================================================================
+   COMPUTATION
+========================================================================= */
+async function computeClientBalances(clientId) {
+  const txns = await db.transactions.where('clientId').equals(clientId).toArray();
+  let savings = 0, loan = 0;
+  for (const t of txns) {
+    if (t.type === 'deposit') savings += t.amount;
+    if (t.type === 'withdrawal') savings -= t.amount;
+    if (t.type === 'disbursal') loan += t.amount;
+    if (t.type === 'repayment') loan -= t.amount;
+  }
+  return { savings, loan };
+}
+
+async function computeGlobalTotals() {
+  const all = await db.transactions.toArray();
+  let savings = 0, loan = 0;
+  const buckets = { today: 0, yesterday: 0, week: 0, month: 0, year: 0 };
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const yStart = startOfDay(daysAgo(1));
+  const weekStart = startOfDay(daysAgo(6));
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const yearStart = new Date(now.getFullYear(), 0, 1);
+
+  for (const t of all) {
+    if (t.type === 'deposit') savings += t.amount;
+    if (t.type === 'withdrawal') savings -= t.amount;
+    if (t.type === 'disbursal') loan += t.amount;
+    if (t.type === 'repayment') loan -= t.amount;
+
+    // "gross collections" = cash coming IN to the agent: deposits + repayments
+    if (t.type === 'deposit' || t.type === 'repayment') {
+      const ts = new Date(t.timestamp);
+      if (ts >= todayStart) buckets.today += t.amount;
+      else if (ts >= yStart && ts < todayStart) buckets.yesterday += t.amount;
+      if (ts >= weekStart) buckets.week += t.amount;
+      if (ts >= monthStart) buckets.month += t.amount;
+      if (ts >= yearStart) buckets.year += t.amount;
+    }
+  }
+  return { savings, loan, buckets };
+}
+
+/* =========================================================================
+   RENDER: HOME
+========================================================================= */
+async function renderHome() {
+  const { savings, loan, buckets } = await computeGlobalTotals();
+  document.getElementById('stat-today').textContent = fmtMoney(buckets.today);
+  document.getElementById('stat-yesterday').textContent = fmtMoney(buckets.yesterday);
+  document.getElementById('stat-week').textContent = fmtMoney(buckets.week);
+  document.getElementById('stat-month').textContent = fmtMoney(buckets.month);
+  document.getElementById('stat-year').textContent = fmtMoney(buckets.year);
+  document.getElementById('stat-total-savings').textContent = fmtMoney(savings);
+  document.getElementById('stat-total-loans').textContent = fmtMoney(loan);
+
+  const clients = (await db.clients.toArray()).filter(c => !c.hidden);
+  const list = document.getElementById('client-list');
+  list.innerHTML = '';
+  for (const c of clients) {
+    const bal = await computeClientBalances(c.id);
+    const initials = c.name.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
+    const avatar = c.photo
+      ? `<img src="${c.photo}" class="w-11 h-11 rounded-full object-cover shrink-0">`
+      : `<div class="w-11 h-11 rounded-full bg-ledger-500 text-white flex items-center justify-center font-display font-semibold shrink-0">${initials}</div>`;
+    const row = document.createElement('button');
+    row.className = 'tap w-full flex items-center gap-3 rounded-2xl bg-ink-50 dark:bg-ink-700 p-3 text-left';
+    row.innerHTML = `
+      ${avatar}
+      <div class="flex-1 min-w-0">
+        <p class="font-medium text-sm truncate">${c.name}</p>
+        <p class="text-[11px] text-ink-900/50 dark:text-paper/50">${c.loanEligible ? 'Loan eligible' : 'Savings only'}</p>
+      </div>
+      <div class="text-right shrink-0">
+        <p class="font-mono-num text-xs text-savings-600 dark:text-savings-500">${fmtMoney(bal.savings)}</p>
+        <p class="font-mono-num text-xs text-loan-600 dark:text-loan-500">${fmtMoney(bal.loan)}</p>
+      </div>`;
+    row.addEventListener('click', () => openClient(c.id));
+    list.appendChild(row);
+  }
+  if (clients.length === 0) {
+    list.innerHTML = `<p class="text-sm text-ink-900/50 dark:text-paper/50 text-center py-6">No clients yet — add your first client to get started.</p>`;
+  }
+}
+
+/* =========================================================================
+   RENDER: CLIENT PROFILE
+========================================================================= */
+async function openClient(clientId) {
+  currentClientId = clientId;
+  const c = await db.clients.get(clientId);
+  if (!c) return;
+  const bal = await computeClientBalances(clientId);
+
+  const profileAvatar = c.photo
+    ? `<img src="${c.photo}" class="w-14 h-14 rounded-full object-cover">`
+    : `<div class="w-14 h-14 rounded-full bg-ledger-500 text-white flex items-center justify-center font-display font-semibold text-lg">${c.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</div>`;
+  document.getElementById('client-profile-header').innerHTML = `
+    <div class="flex items-center gap-3">
+      ${profileAvatar}
+      <div>
+        <p class="font-display font-semibold text-base">${c.name}</p>
+        <p class="text-xs text-ink-900/60 dark:text-paper/60 font-mono-num">+${c.phone}</p>
+        ${c.location ? `<p class="text-[11px] text-ink-900/40 dark:text-paper/40">${c.location}</p>` : ''}
+        <p class="text-[11px] text-ink-900/40 dark:text-paper/40 mt-0.5">Client since ${fmtDate(c.createdAt)}</p>
+      </div>
+    </div>`;
+  document.getElementById('client-savings-total').textContent = fmtMoney(bal.savings);
+  document.getElementById('client-loan-total').textContent = fmtMoney(bal.loan);
+  document.getElementById('client-loan-toggle').checked = !!c.loanEligible;
+
+  const txns = await db.transactions.where('clientId').equals(clientId).reverse().sortBy('timestamp');
+  const tl = document.getElementById('client-timeline');
+  tl.innerHTML = '';
+  if (txns.length === 0) {
+    tl.innerHTML = `<p class="text-sm text-ink-900/50 dark:text-paper/50 text-center py-4">No transactions recorded yet.</p>`;
+  }
+  for (const t of txns) {
+    tl.appendChild(txnRow(t));
+  }
+
+  showView('client');
+}
+
+function txnRow(t) {
+  const meta = TYPE_META[t.type];
+  const row = document.createElement('div');
+  row.className = `rounded-2xl border ${meta.bg} p-3 flex items-center gap-3`;
+  row.innerHTML = `
+    <div class="w-9 h-9 rounded-full flex items-center justify-center bg-white/60 dark:bg-black/20 ${meta.cls} font-semibold">${meta.icon}</div>
+    <div class="flex-1 min-w-0">
+      <p class="text-sm font-medium ${meta.cls}">${meta.label}</p>
+      <p class="text-[11px] text-ink-900/50 dark:text-paper/50">${fmtDate(t.timestamp)} ${t.synced ? '· synced' : '· pending sync'}</p>
+      ${t.note ? `<p class="text-[11px] text-ink-900/40 dark:text-paper/40 truncate">${t.note}</p>` : ''}
+    </div>
+    <div class="text-right shrink-0">
+      <p class="font-mono-num text-sm font-semibold ${meta.cls}">${meta.sign > 0 ? '+' : '−'}${fmtMoney(t.amount).replace(CURRENCY, CURRENCY)}</p>
+      <button data-receipt="${t.id}" class="text-[11px] text-ledger-500 font-medium mt-0.5">Receipt</button>
+    </div>`;
+  row.querySelector('[data-receipt]').addEventListener('click', () => openReceipt(t.id));
+  return row;
+}
+
+/* =========================================================================
+   RENDER: LEDGER / TRANSACTIONS
+========================================================================= */
+async function populateClientFilters() {
+  const clients = (await db.clients.toArray()).filter(c => !c.hidden);
+  const fClient = document.getElementById('f-client');
+  const aClient = document.getElementById('a-client');
+  const txnClient = document.getElementById('txn-client');
+  fClient.innerHTML = '<option value="">All clients</option>' + clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  if (aClient) aClient.innerHTML = '<option value="">All clients</option>' + clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  txnClient.innerHTML = clients.map(c => `<option value="${c.id}" data-eligible="${c.loanEligible}">${c.name}</option>`).join('');
+}
+
+async function getFilteredTransactions({ clientId, type, min, max, from, to, search, sync } = {}) {
+  const clientF = clientId ?? document.getElementById('f-client').value;
+  const typeF = type ?? document.getElementById('f-type').value;
+  const syncF = sync ?? document.getElementById('f-sync').value;
+  const minF = typeof min === 'number' ? min : parseFloat(document.getElementById('f-min').value);
+  const maxF = typeof max === 'number' ? max : parseFloat(document.getElementById('f-max').value);
+  const fromF = from ?? document.getElementById('f-from').value;
+  const toF = to ?? document.getElementById('f-to').value;
+  const searchText = ((search !== undefined ? search : document.getElementById('f-search').value) || '').toLowerCase().trim();
+
+  let txns = await db.transactions.orderBy('timestamp').reverse().toArray();
+  const clients = await db.clients.toArray();
+  const clientMap = Object.fromEntries(clients.map(c => [c.id, c.name]));
+
+  txns = txns.filter(t => {
+    const clientName = (clientMap[t.clientId] || '').toLowerCase();
+    const noteText = (t.note || '').toLowerCase();
+    if (searchText && !clientName.includes(searchText) && !noteText.includes(searchText) && !String(t.amount).includes(searchText)) return false;
+    if (clientF && t.clientId !== clientF) return false;
+    if (typeF && t.type !== typeF) return false;
+    if (syncF === 'synced' && !t.synced) return false;
+    if (syncF === 'pending' && t.synced) return false;
+    if (!isNaN(minF) && t.amount < minF) return false;
+    if (!isNaN(maxF) && t.amount > maxF) return false;
+    if (fromF && new Date(t.timestamp) < new Date(fromF)) return false;
+    if (toF && new Date(t.timestamp) > new Date(toF + 'T23:59:59')) return false;
+    return true;
+  });
+
+  return { txns, clientMap };
+}
+
+async function renderLedger() {
+  const { txns, clientMap } = await getFilteredTransactions();
+  const list = document.getElementById('ledger-list');
+  list.innerHTML = '';
+  if (txns.length === 0) {
+    list.innerHTML = `<p class="text-sm text-ink-900/50 dark:text-paper/50 text-center py-8">No transactions match these filters.</p>`;
+    return;
+  }
+  for (const t of txns) {
+    const row = txnRow(t);
+    row.querySelector('.flex-1').insertAdjacentHTML('afterbegin', `<p class="text-xs font-semibold">${clientMap[t.clientId] || 'Unknown client'}</p>`);
+    list.appendChild(row);
+  }
+}
+
+/* =========================================================================
+   CHARTS
+========================================================================= */
+function chartColors() {
+  const dark = document.documentElement.classList.contains('dark');
+  return {
+    text: dark ? '#E7ECF1' : '#0B1A2B',
+    grid: dark ? 'rgba(231,236,241,0.08)' : 'rgba(11,26,43,0.06)',
+    savings: '#0F9D74',
+    loan: '#C77D2A',
+    ledger: '#1E5B8C',
+  };
+}
+
+async function renderCharts() {
+  const colors = chartColors();
+  const filters = {
+    clientId: document.getElementById('a-client').value || '',
+    type: document.getElementById('a-type').value || '',
+    min: parseFloat(document.getElementById('a-min').value),
+    max: parseFloat(document.getElementById('a-max').value),
+    from: document.getElementById('a-from').value,
+    to: document.getElementById('a-to').value,
+  };
+  const { txns } = await getFilteredTransactions({
+    clientId: filters.clientId,
+    type: filters.type,
+    min: isNaN(filters.min) ? undefined : filters.min,
+    max: isNaN(filters.max) ? undefined : filters.max,
+    from: filters.from,
+    to: filters.to,
+  });
+  const summaryEl = document.getElementById('analytics-summary');
+  const total = txns.reduce((sum, t) => sum + (t.amount || 0), 0);
+  summaryEl.textContent = `${txns.length} record${txns.length === 1 ? '' : 's'} • ${fmtMoney(total)}`;
+
+  const startDate = filters.from ? new Date(filters.from) : new Date(Date.now() - 29 * 86400000);
+  const endDate = filters.to ? new Date(filters.to + 'T23:59:59') : new Date();
+  const dayCount = Math.max(1, Math.ceil((endDate - startDate) / 86400000) + 1);
+  const labels = [];
+  const values = [];
+  for (let i = 0; i < dayCount; i++) {
+    const current = new Date(startDate);
+    current.setDate(startDate.getDate() + i);
+    const dayStart = startOfDay(current);
+    const dayEnd = new Date(dayStart.getTime() + 86400000);
+    labels.push(current.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+    const totalForDay = txns.filter(t => {
+      const d = new Date(t.timestamp);
+      return d >= dayStart && d < dayEnd;
+    }).reduce((sum, t) => sum + t.amount, 0);
+    values.push(Math.round(totalForDay * 100) / 100);
+  }
+
+  if (charts.activity) charts.activity.destroy();
+  charts.activity = new Chart(document.getElementById('chart-activity'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Activity',
+        data: values,
+        borderColor: colors.ledger,
+        backgroundColor: 'rgba(30,91,140,0.16)',
+        fill: true,
+        tension: 0.34,
+        pointRadius: 3,
+        pointBackgroundColor: colors.ledger,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: colors.text }, grid: { color: colors.grid, drawBorder: false } },
+        y: { ticks: { color: colors.text }, grid: { color: colors.grid }, beginAtZero: true }
+      }
+    }
+  });
+
+  const typeTotals = { deposit: 0, withdrawal: 0, disbursal: 0, repayment: 0 };
+  txns.forEach(t => { if (typeTotals[t.type] !== undefined) typeTotals[t.type] += t.amount; });
+  if (charts.breakdown) charts.breakdown.destroy();
+  charts.breakdown = new Chart(document.getElementById('chart-breakdown'), {
+    type: 'bar',
+    data: {
+      labels: ['Deposit', 'Withdrawal', 'Disbursal', 'Repayment'],
+      datasets: [{
+        label: 'Movement',
+        data: [typeTotals.deposit, typeTotals.withdrawal, typeTotals.disbursal, typeTotals.repayment],
+        backgroundColor: [colors.savings, colors.alert, colors.loan, colors.ledger],
+        borderRadius: 8,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: colors.text }, grid: { display: false } },
+        y: { ticks: { color: colors.text }, grid: { color: colors.grid }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+/* =========================================================================
+   VIEW SWITCHING
+========================================================================= */
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active-nav'));
+  const navMatch = document.querySelector(`.nav-btn[data-view="${name}"]`);
+  if (navMatch) navMatch.classList.add('active-nav');
+  window.scrollTo(0,0);
+
+  if (name === 'transactions') renderLedger();
+  if (name === 'analytics') renderCharts();
+  if (name === 'home') renderHome();
+  if (name === 'settings') renderSettings();
+}
+
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => showView(btn.dataset.view));
+});
+
+/* =========================================================================
+   MODALS: NEW TRANSACTION
+========================================================================= */
+const modalTxn = document.getElementById('modal-txn');
+document.getElementById('btn-new-txn').addEventListener('click', async () => {
+  await populateClientFilters();
+  selectedTxnType = 'deposit';
+  updateTxnTypeButtons();
+  document.getElementById('form-txn').reset();
+  checkLoanEligibilityHint();
+  modalTxn.classList.remove('hidden');
+  modalTxn.classList.add('flex');
+});
+document.getElementById('close-txn').addEventListener('click', () => {
+  modalTxn.classList.add('hidden'); modalTxn.classList.remove('flex');
+});
+
+document.querySelectorAll('.txn-type-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectedTxnType = btn.dataset.type;
+    updateTxnTypeButtons();
+    checkLoanEligibilityHint();
+  });
+});
+function updateTxnTypeButtons() {
+  document.querySelectorAll('.txn-type-btn').forEach(b => {
+    const active = b.dataset.type === selectedTxnType;
+    b.classList.toggle('border-ledger-500', active && selectedTxnType!=='deposit');
+    b.classList.toggle('border-savings-500', active && selectedTxnType==='deposit');
+    b.classList.toggle('text-ledger-500', active && !['deposit'].includes(selectedTxnType));
+    b.classList.toggle('bg-ink-50', active);
+    b.classList.toggle('dark:bg-ink-700', active);
+  });
+}
+async function checkLoanEligibilityHint() {
+  const sel = document.getElementById('txn-client');
+  const opt = sel.options[sel.selectedIndex];
+  const hint = document.getElementById('txn-type-hint');
+  const submitBtn = document.querySelector('#form-txn button[type=submit]');
+  if (selectedTxnType === 'disbursal' && opt && opt.dataset.eligible !== 'true') {
+    hint.classList.remove('hidden');
+    submitBtn.disabled = true;
+    submitBtn.classList.add('opacity-40');
+  } else {
+    hint.classList.add('hidden');
+    submitBtn.disabled = false;
+    submitBtn.classList.remove('opacity-40');
+  }
+}
+document.getElementById('txn-client').addEventListener('change', checkLoanEligibilityHint);
+
+document.getElementById('form-txn').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const clientId = document.getElementById('txn-client').value;
+  const client = await db.clients.get(clientId);
+  if (!client) return;
+  if (selectedTxnType === 'disbursal' && !client.loanEligible) {
+    toast('This client is not loan eligible.');
+    return;
+  }
+  const amount = parseFloat(document.getElementById('txn-amount').value);
+  const note = document.getElementById('txn-note').value.trim();
+  const now = new Date().toISOString();
+  const record = {
+    id: uid(),
+    clientId,
+    type: selectedTxnType,
+    amount,
+    note,
+    timestamp: now, // captured automatically, not editable
+    updatedAt: now,
+    synced: false,
+  };
+  await db.transactions.add(record);
+  modalTxn.classList.add('hidden'); modalTxn.classList.remove('flex');
+  toast('Transaction saved');
+  await refreshCurrentView();
+  attemptSync();
+  openReceipt(record.id, client.phone);
+});
+
+/* =========================================================================
+   MODALS: ADD / EDIT CLIENT (with optional photo)
+========================================================================= */
+const modalClient = document.getElementById('modal-client');
+let editingClientId = null;
+let pendingPhoto = undefined; // undefined = unchanged, null = removed, dataURL = new photo
+
+function resetClientPhotoUI(existingPhoto) {
+  pendingPhoto = undefined;
+  const preview = document.getElementById('client-photo-preview');
+  const removeBtn = document.getElementById('client-photo-remove');
+  document.getElementById('client-photo-input').value = '';
+  if (existingPhoto) {
+    preview.innerHTML = `<img src="${existingPhoto}" class="w-full h-full object-cover">`;
+    removeBtn.classList.remove('hidden');
+  } else {
+    preview.innerHTML = '📷';
+    removeBtn.classList.add('hidden');
+  }
+}
+
+// Resize/compress any chosen photo client-side so local + cloud storage stays small.
+function readAndCompressImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read image'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 320;
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.onerror = () => reject(new Error('Could not load image'));
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('client-photo-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    pendingPhoto = await readAndCompressImage(file);
+    document.getElementById('client-photo-preview').innerHTML = `<img src="${pendingPhoto}" class="w-full h-full object-cover">`;
+    document.getElementById('client-photo-remove').classList.remove('hidden');
+  } catch (err) {
+    toast('Could not use that image');
+  }
+});
+document.getElementById('client-photo-remove').addEventListener('click', () => {
+  pendingPhoto = null;
+  document.getElementById('client-photo-preview').innerHTML = '📷';
+  document.getElementById('client-photo-input').value = '';
+  document.getElementById('client-photo-remove').classList.add('hidden');
+});
+
+document.getElementById('btn-add-client').addEventListener('click', () => {
+  editingClientId = null;
+  document.getElementById('client-modal-title').textContent = 'Add client';
+  document.getElementById('client-form-submit').textContent = 'Save client';
+  document.getElementById('form-client').reset();
+  resetClientPhotoUI(null);
+  document.getElementById('client-hidden').checked = false;
+  modalClient.classList.remove('hidden'); modalClient.classList.add('flex');
+});
+document.getElementById('btn-edit-client').addEventListener('click', async () => {
+  if (!currentClientId) return;
+  const c = await db.clients.get(currentClientId);
+  if (!c) return;
+  editingClientId = c.id;
+  document.getElementById('client-modal-title').textContent = 'Edit client';
+  document.getElementById('client-form-submit').textContent = 'Save changes';
+  document.getElementById('client-name').value = c.name;
+  document.getElementById('client-phone').value = c.phone || '';
+  document.getElementById('client-location').value = c.location || '';
+  document.getElementById('client-eligible').checked = !!c.loanEligible;
+  document.getElementById('client-hidden').checked = !!c.hidden;
+  resetClientPhotoUI(c.photo || null);
+  modalClient.classList.remove('hidden'); modalClient.classList.add('flex');
+});
+document.getElementById('close-client').addEventListener('click', () => {
+  modalClient.classList.add('hidden'); modalClient.classList.remove('flex');
+});
+document.getElementById('form-client').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('client-name').value.trim();
+  const phone = document.getElementById('client-phone').value.trim().replace(/\D/g, '');
+  const location = document.getElementById('client-location').value.trim();
+  const loanEligible = document.getElementById('client-eligible').checked;
+  const hidden = document.getElementById('client-hidden').checked;
+  const now = new Date().toISOString();
+
+  if (editingClientId) {
+    const patch = { name, phone, location, loanEligible, hidden, updatedAt: now, synced: false };
+    if (pendingPhoto !== undefined) patch.photo = pendingPhoto; // null clears it, dataURL sets it
+    await db.clients.update(editingClientId, patch);
+    toast('Client updated');
+  } else {
+    await db.clients.add({
+      id: uid(), name, phone, location, loanEligible, hidden,
+      photo: pendingPhoto || null,
+      createdAt: now, updatedAt: now, synced: false,
+    });
+    toast('Client added');
+  }
+  modalClient.classList.add('hidden'); modalClient.classList.remove('flex');
+  await populateClientFilters();
+  await refreshCurrentView();
+  attemptSync();
+});
+
+document.getElementById('btn-back-client').addEventListener('click', () => showView('home'));
+document.getElementById('client-loan-toggle').addEventListener('change', async (e) => {
+  if (!currentClientId) return;
+  await db.clients.update(currentClientId, { loanEligible: e.target.checked, updatedAt: new Date().toISOString(), synced: false });
+  toast(e.target.checked ? 'Loan eligibility enabled' : 'Loan eligibility disabled');
+  await populateClientFilters();
+  attemptSync();
+});
+
+/* =========================================================================
+   WHATSAPP RECEIPT MODAL
+========================================================================= */
+const modalReceipt = document.getElementById('modal-receipt');
+let receiptState = null; // holds the fetched data so the link never depends on an in-flight DB read
+
+async function openReceipt(txnId, phone) {
+  const t = await db.transactions.get(txnId);
+  if (!t) return;
+  const c = await db.clients.get(t.clientId);
+  const bal = await computeClientBalances(t.clientId);
+  const meta = TYPE_META[t.type];
+  const receiptId = 'RCPT-' + t.id.slice(-8).toUpperCase();
+
+  receiptState = { t, c, bal, meta, receiptId };
+
+  document.getElementById('receipt-body').innerHTML = `
+    <div class="flex justify-between"><span>Receipt ID</span><span>${receiptId}</span></div>
+    <div class="flex justify-between"><span>Client</span><span>${c ? c.name : ''}</span></div>
+    <div class="flex justify-between"><span>Date</span><span>${fmtDate(t.timestamp)}</span></div>
+    <div class="flex justify-between"><span>Type</span><span>${meta.label}</span></div>
+    <div class="flex justify-between font-semibold"><span>Amount</span><span>${fmtMoney(t.amount)}</span></div>
+    <div class="flex justify-between"><span>Savings bal.</span><span>${fmtMoney(bal.savings)}</span></div>
+    <div class="flex justify-between"><span>Loan bal.</span><span>${fmtMoney(bal.loan)}</span></div>
+  `;
+  document.getElementById('receipt-note').value = t.note || '';
+  document.getElementById('receipt-phone').value = (phone || (c ? c.phone : '') || '').replace(/\D/g, '');
+  document.getElementById('receipt-phone-hint').classList.add('hidden');
+  modalReceipt.classList.remove('hidden'); modalReceipt.classList.add('flex');
+  updateReceiptLink(); // synchronous — receiptState is already in memory, so the link is correct immediately
+}
+document.getElementById('close-receipt').addEventListener('click', () => {
+  modalReceipt.classList.add('hidden'); modalReceipt.classList.remove('flex');
+  receiptState = null;
+});
+document.getElementById('receipt-note').addEventListener('input', updateReceiptLink);
+document.getElementById('receipt-phone').addEventListener('input', updateReceiptLink);
+
+function updateReceiptLink() {
+  if (!receiptState) return;
+  const { t, c, bal, meta, receiptId } = receiptState;
+  const note = document.getElementById('receipt-note').value.trim();
+  const phone = document.getElementById('receipt-phone').value.trim().replace(/\D/g, '');
+  const link = document.getElementById('send-receipt');
+  const hint = document.getElementById('receipt-phone-hint');
+
+  const text = [
+    `*Thank You ${c.name} for saving with us!*`,
+    `*This is your receipt*`,
+    `*Contact 0208994825 for more info*`,
+    ``,
+    ``,
+    `Receipt ID: ${receiptId}`,
+    `Client: ${c ? c.name : ''}`,
+    `Date: ${fmtDate(t.timestamp)}`,
+    `Type: ${meta.label}`,
+    `Amount: ${fmtMoney(t.amount)}`,
+    `Savings balance: ${fmtMoney(bal.savings)}`,
+    `Loan balance: ${fmtMoney(bal.loan)}`,
+    note ? `Note: ${note}` : null,
+  ].filter(Boolean).join('\n');
+
+  // A valid international number is at minimum a country code + local number (~8 digits).
+  if (phone.length < 8) {
+    link.href = '#';
+    link.setAttribute('aria-disabled', 'true');
+    link.classList.add('opacity-40', 'pointer-events-none');
+    hint.classList.remove('hidden');
+  } else {
+    link.classList.remove('opacity-40', 'pointer-events-none');
+    link.removeAttribute('aria-disabled');
+    hint.classList.add('hidden');
+    // api.whatsapp.com/send is the official, most reliable deep link — it opens the
+    // WhatsApp app when installed and falls back to WhatsApp Web otherwise.
+    link.href = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}`;
+  }
+}
+
+/* =========================================================================
+   FILTERS / EXPORT
+========================================================================= */
+['f-client','f-type','f-sync','f-min','f-max','f-from','f-to','f-search'].forEach(id => {
+  document.getElementById(id).addEventListener('input', renderLedger);
+  document.getElementById(id).addEventListener('change', renderLedger);
+});
+document.getElementById('btn-clear-filters').addEventListener('click', () => {
+  ['f-client','f-type','f-sync','f-min','f-max','f-from','f-to','f-search'].forEach(id => document.getElementById(id).value = '');
+  renderLedger();
+});
+['a-client','a-type','a-min','a-max','a-from','a-to'].forEach(id => {
+  document.getElementById(id).addEventListener('input', renderCharts);
+  document.getElementById(id).addEventListener('change', renderCharts);
+});
+let previewReportElement = null;
+let previewChartInstance = null;
+
+function closeExportPreview() {
+  const modal = document.getElementById('modal-export-preview');
+  modal.classList.add('hidden');
+  const body = document.getElementById('export-preview-body');
+  body.innerHTML = '';
+  if (previewChartInstance) {
+    previewChartInstance.destroy();
+    previewChartInstance = null;
+  }
+  previewReportElement = null;
+}
+
+document.getElementById('close-export-preview').addEventListener('click', closeExportPreview);
+document.getElementById('export-preview-close').addEventListener('click', closeExportPreview);
+
+document.getElementById('export-preview-download').addEventListener('click', () => {
+  if (!previewReportElement) return;
+  const filename = previewReportElement.dataset.exportType === 'chart' ? 'uncle-atto-analytics.pdf' : 'uncle-atto-statement.pdf';
+  toast('Downloading PDF...');
+  html2pdf().set({ margin: 0.3, filename, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' } }).from(previewReportElement).save();
+});
+
+document.getElementById('btn-preview-pdf').addEventListener('click', async () => {
+  const { txns, clientMap } = await getFilteredTransactions();
+  const selectedClientId = document.getElementById('f-client').value;
+  const selectedClient = selectedClientId ? await db.clients.get(selectedClientId) : null;
+  const activeFilters = [
+    document.getElementById('f-client').value ? `Client: ${selectedClient?.name || 'Selected'}` : '',
+    document.getElementById('f-type').value ? `Type: ${document.getElementById('f-type').value}` : '',
+    document.getElementById('f-from').value ? `From: ${document.getElementById('f-from').value}` : '',
+    document.getElementById('f-to').value ? `To: ${document.getElementById('f-to').value}` : '',
+    document.getElementById('f-search').value ? `Search: ${document.getElementById('f-search').value}` : ''
+  ].filter(Boolean);
+  const clients = await db.clients.toArray();
+  const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
+  const totals = txns.reduce((acc, t) => { if (t.type === 'deposit') acc.deposit += t.amount; if (t.type === 'withdrawal') acc.withdrawal += t.amount; if (t.type === 'disbursal') acc.disbursal += t.amount; if (t.type === 'repayment') acc.repayment += t.amount; return acc; }, { deposit: 0, withdrawal: 0, disbursal: 0, repayment: 0 });
+  const rows = txns.map(t => {
+    const client = clientDetails[t.clientId];
+    const avatar = client?.photo ? `<img src="${client.photo}" style="width:32px;height:32px;border-radius:999px;object-fit:cover;">` : `<div style="width:32px;height:32px;border-radius:999px;background:#E8F7EE;color:#0F9D74;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:12px;">${(client?.name || '?').split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()}</div>`;
+    return `
+      <tr>
+        <td style="padding:10px 8px;border-bottom:1px solid #E4E9EE;">${new Date(t.timestamp).toLocaleDateString('en-GB')}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #E4E9EE;vertical-align:middle;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div>${avatar}</div>
+            <div style="min-width:0;">
+              <div style="font-weight:700;font-size:13px;">${client?.name || 'Unknown client'}</div>
+              <div style="font-size:11px;color:#64748b;">${client?.location || ''}</div>
+            </div>
+          </div>
+        </td>
+        <td style="padding:10px 8px;border-bottom:1px solid #E4E9EE;">${t.type.replace(/(^\w|\s+\w)/g, m => m.toUpperCase())}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #E4E9EE;text-align:right;font-weight:700;color:#0F9D74;">${fmtMoney(t.amount)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #E4E9EE;overflow-wrap:anywhere;">${t.note || '—'}</td>
+      </tr>`;
+  }).join('');
+  const report = document.createElement('div');
+  report.dataset.exportType = 'statement';
+  report.style.cssText = 'padding:24px; background:white; color:#0B1A2B; font-family:Inter, Arial, sans-serif; width:850px;';
+  report.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1E5B8C;padding-bottom:12px;">
+      <div>
+        <div style="font-size:24px;font-weight:800;color:#0B1A2B;">Uncle Atto's Savings App</div>
+        <div style="font-size:13px;color:#64748b;margin-top:4px;">Professional savings statement</div>
+      </div>
+      <div style="text-align:right;font-size:12px;color:#64748b;">Generated ${new Date().toLocaleString('en-GB')}</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:18px 0;padding:16px;border-radius:16px;background:#F5F7F8;">
+      <div style="display:flex;gap:14px;align-items:center;">
+        ${selectedClient?.photo ? `<img src="${selectedClient.photo}" style="width:78px;height:78px;border-radius:16px;object-fit:cover;">` : `<div style="width:78px;height:78px;border-radius:16px;background:#E8F7EE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0F9D74;font-size:24px;">${(selectedClient?.name || 'ALL').split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()}</div>`}
+        <div>
+          <div style="font-weight:700;font-size:16px;">${selectedClient ? selectedClient.name : 'All clients'}</div>
+          <div style="font-size:12px;color:#64748b;">${selectedClient ? `Phone: ${selectedClient.phone || '—'}` : 'Combined account statement'}</div>
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:14px;font-weight:700;color:#0F9D74;">Total movement: ${fmtMoney(txns.reduce((s, t) => s + t.amount, 0))}</div>
+        <div style="font-size:12px;color:#64748b;">${txns.length} transaction${txns.length === 1 ? '' : 's'}</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:12px;">${activeFilters.length ? `Filters: ${activeFilters.join(' • ')}` : 'Filters: All records'}</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+      <div style="padding:10px;border-radius:12px;background:#E8F7EE;"><div style="font-size:11px;color:#0C8362;">Deposits</div><div style="font-size:15px;font-weight:700;color:#0F9D74;">${fmtMoney(totals.deposit)}</div></div>
+      <div style="padding:10px;border-radius:12px;background:#FEECEC;"><div style="font-size:11px;color:#A8651E;">Withdrawals</div><div style="font-size:15px;font-weight:700;color:#D0503A;">${fmtMoney(totals.withdrawal)}</div></div>
+      <div style="padding:10px;border-radius:12px;background:#FFF7E8;"><div style="font-size:11px;color:#A8651E;">Disbursals</div><div style="font-size:15px;font-weight:700;color:#C77D2A;">${fmtMoney(totals.disbursal)}</div></div>
+      <div style="padding:10px;border-radius:12px;background:#EFF6FF;"><div style="font-size:11px;color:#184A72;">Repayments</div><div style="font-size:15px;font-weight:700;color:#1E5B8C;">${fmtMoney(totals.repayment)}</div></div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;">
+      <thead>
+        <tr style="background:#0B1A2B;color:white;text-align:left;">
+          <th style="padding:10px 8px;width:15%;">Date</th>
+          <th style="padding:10px 8px;width:28%;">Client</th>
+          <th style="padding:10px 8px;width:18%;">Type</th>
+          <th style="padding:10px 8px;width:16%;text-align:right;">Amount</th>
+          <th style="padding:10px 8px;width:23%;">Note</th>
+        </tr>
+      </thead>
+      <tbody>${rows || '<tr><td colspan="5" style="padding:12px;text-align:center;color:#64748b;">No transactions found.</td></tr>'}</tbody>
+    </table>`;
+  const body = document.getElementById('export-preview-body');
+  body.innerHTML = '';
+  body.appendChild(report);
+  document.getElementById('modal-export-preview').classList.remove('hidden');
+  previewReportElement = report;
+});
+
+document.getElementById('btn-export-pdf').addEventListener('click', async () => {
+  const { txns, clientMap } = await getFilteredTransactions();
+  const selectedClientId = document.getElementById('f-client').value;
+  const selectedClient = selectedClientId ? await db.clients.get(selectedClientId) : null;
+  const activeFilters = [
+    document.getElementById('f-client').value ? `Client: ${selectedClient?.name || 'Selected'}` : '',
+    document.getElementById('f-type').value ? `Type: ${document.getElementById('f-type').value}` : '',
+    document.getElementById('f-from').value ? `From: ${document.getElementById('f-from').value}` : '',
+    document.getElementById('f-to').value ? `To: ${document.getElementById('f-to').value}` : '',
+    document.getElementById('f-search').value ? `Search: ${document.getElementById('f-search').value}` : ''
+  ].filter(Boolean);
+  const clients = await db.clients.toArray();
+  const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
+  const totals = txns.reduce((acc, t) => { if (t.type === 'deposit') acc.deposit += t.amount; if (t.type === 'withdrawal') acc.withdrawal += t.amount; if (t.type === 'disbursal') acc.disbursal += t.amount; if (t.type === 'repayment') acc.repayment += t.amount; return acc; }, { deposit: 0, withdrawal: 0, disbursal: 0, repayment: 0 });
+  const rows = txns.map(t => {
+    const client = clientDetails[t.clientId];
+    const avatar = client?.photo ? `<img src="${client.photo}" style="width:32px;height:32px;border-radius:999px;object-fit:cover;">` : `<div style="width:32px;height:32px;border-radius:999px;background:#E8F7EE;color:#0F9D74;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:12px;">${(client?.name || '?').split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()}</div>`;
+    return `
+      <tr>
+        <td style="padding:10px 8px;border-bottom:1px solid #E4E9EE;">${new Date(t.timestamp).toLocaleDateString('en-GB')}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #E4E9EE;vertical-align:middle;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div>${avatar}</div>
+            <div style="min-width:0;">
+              <div style="font-weight:700;font-size:13px;">${client?.name || 'Unknown client'}</div>
+              <div style="font-size:11px;color:#64748b;">${client?.location || ''}</div>
+            </div>
+          </div>
+        </td>
+        <td style="padding:10px 8px;border-bottom:1px solid #E4E9EE;">${t.type.replace(/(^\w|\s+\w)/g, m => m.toUpperCase())}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #E4E9EE;text-align:right;font-weight:700;color:#0F9D74;">${fmtMoney(t.amount)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #E4E9EE;overflow-wrap:anywhere;">${t.note || '—'}</td>
+      </tr>`;
+  }).join('');
+  const report = document.createElement('div');
+  report.style.cssText = 'padding:24px; background:white; color:#0B1A2B; font-family:Inter, Arial, sans-serif; width:850px;';
+  report.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1E5B8C;padding-bottom:12px;">
+      <div>
+        <div style="font-size:24px;font-weight:800;color:#0B1A2B;">Uncle Atto's Savings App</div>
+        <div style="font-size:13px;color:#64748b;margin-top:4px;">Professional savings statement</div>
+      </div>
+      <div style="text-align:right;font-size:12px;color:#64748b;">Generated ${new Date().toLocaleString('en-GB')}</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:18px 0;padding:16px;border-radius:16px;background:#F5F7F8;">
+      <div style="display:flex;gap:14px;align-items:center;">
+        ${selectedClient?.photo ? `<img src="${selectedClient.photo}" style="width:78px;height:78px;border-radius:16px;object-fit:cover;">` : `<div style="width:78px;height:78px;border-radius:16px;background:#E8F7EE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0F9D74;font-size:24px;">${(selectedClient?.name || 'ALL').split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()}</div>`}
+        <div>
+          <div style="font-weight:700;font-size:16px;">${selectedClient ? selectedClient.name : 'All clients'}</div>
+          <div style="font-size:12px;color:#64748b;">${selectedClient ? `Phone: ${selectedClient.phone || '—'}` : 'Combined account statement'}</div>
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:14px;font-weight:700;color:#0F9D74;">Total movement: ${fmtMoney(txns.reduce((s, t) => s + t.amount, 0))}</div>
+        <div style="font-size:12px;color:#64748b;">${txns.length} transaction${txns.length === 1 ? '' : 's'}</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:12px;">${activeFilters.length ? `Filters: ${activeFilters.join(' • ')}` : 'Filters: All records'}</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+      <div style="padding:10px;border-radius:12px;background:#E8F7EE;"><div style="font-size:11px;color:#0C8362;">Deposits</div><div style="font-size:15px;font-weight:700;color:#0F9D74;">${fmtMoney(totals.deposit)}</div></div>
+      <div style="padding:10px;border-radius:12px;background:#FEECEC;"><div style="font-size:11px;color:#A8651E;">Withdrawals</div><div style="font-size:15px;font-weight:700;color:#D0503A;">${fmtMoney(totals.withdrawal)}</div></div>
+      <div style="padding:10px;border-radius:12px;background:#FFF7E8;"><div style="font-size:11px;color:#A8651E;">Disbursals</div><div style="font-size:15px;font-weight:700;color:#C77D2A;">${fmtMoney(totals.disbursal)}</div></div>
+      <div style="padding:10px;border-radius:12px;background:#EFF6FF;"><div style="font-size:11px;color:#184A72;">Repayments</div><div style="font-size:15px;font-weight:700;color:#1E5B8C;">${fmtMoney(totals.repayment)}</div></div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;">
+      <thead>
+        <tr style="background:#0B1A2B;color:white;text-align:left;">
+          <th style="padding:10px 8px;width:15%;">Date</th>
+          <th style="padding:10px 8px;width:28%;">Client</th>
+          <th style="padding:10px 8px;width:18%;">Type</th>
+          <th style="padding:10px 8px;width:16%;text-align:right;">Amount</th>
+          <th style="padding:10px 8px;width:23%;">Note</th>
+        </tr>
+      </thead>
+      <tbody>${rows || '<tr><td colspan="5" style="padding:12px;text-align:center;color:#64748b;">No transactions found.</td></tr>'}</tbody>
+    </table>`;
+    const opt = { margin: 0, filename: `${(selectedClient?.name || 'statement').replace(/\s+/g,'-').toLowerCase()}-statement.pdf`, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, useCORS: true, scrollY: 0 }, jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' }, pagebreak: { mode: 'specify', after: '.never-break' } };
+    toast('Preparing statement PDF…');
+    html2pdf().set(opt).from(report).save();
+    });
+
+document.getElementById('btn-preview-chart').addEventListener('click', async () => {
+  const filters = {
+    clientId: document.getElementById('a-client').value || '',
+    type: document.getElementById('a-type').value || '',
+    from: document.getElementById('a-from').value,
+    to: document.getElementById('a-to').value,
+    min: parseFloat(document.getElementById('a-min').value),
+    max: parseFloat(document.getElementById('a-max').value),
+  };
+  const { txns } = await getFilteredTransactions({ clientId: filters.clientId, type: filters.type, min: isNaN(filters.min) ? undefined : filters.min, max: isNaN(filters.max) ? undefined : filters.max, from: filters.from, to: filters.to });
+  const selectedClient = filters.clientId ? await db.clients.get(filters.clientId) : null;
+  const title = selectedClient ? `${selectedClient.name} • ${selectedClient.location || 'Location not set'}` : 'All clients';
+  const filterSummary = [selectedClient ? `Client: ${selectedClient.name}` : 'Client: All', filters.type ? `Type: ${filters.type}` : '', filters.from ? `From: ${filters.from}` : '', filters.to ? `To: ${filters.to}` : '', !isNaN(filters.min) ? `Min: ${fmtMoney(filters.min)}` : '', !isNaN(filters.max) ? `Max: ${fmtMoney(filters.max)}` : ''].filter(Boolean).join(' • ');
+  const report = document.createElement('div');
+  report.dataset.exportType = 'chart';
+  report.style.cssText = 'padding:24px; background:white; color:#0B1A2B; font-family:Inter, Arial, sans-serif; width:850px;';
+  report.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1E5B8C;padding-bottom:12px;">
+      <div>
+        <div style="font-size:24px;font-weight:800;color:#0B1A2B;">Uncle Atto's Savings App</div>
+        <div style="font-size:13px;color:#64748b;margin-top:4px;">Analytics report</div>
+      </div>
+      <div style="text-align:right;font-size:12px;color:#64748b;">Generated ${new Date().toLocaleString('en-GB')}</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0;padding:14px;border-radius:16px;background:#F5F7F8;">
+      <div style="display:flex;gap:12px;align-items:center;">
+        ${selectedClient?.photo ? `<img src="${selectedClient.photo}" style="width:72px;height:72px;border-radius:16px;object-fit:cover;">` : `<div style="width:72px;height:72px;border-radius:16px;background:#E8F7EE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0F9D74;font-size:24px;">${(selectedClient?.name || 'ALL').split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()}</div>`}
+        <div>
+          <div style="font-weight:700;font-size:16px;">${title}</div>
+          <div style="font-size:12px;color:#64748b;">${selectedClient ? `Phone: ${selectedClient.phone || '—'} • Location: ${selectedClient.location || 'Not set'}` : 'All active savings members'}</div>
+        </div>
+      </div>
+      <div style="text-align:right;font-size:13px;color:#0F9D74;font-weight:700;">${txns.length} records • ${fmtMoney(txns.reduce((s,t)=>s+t.amount,0))}</div>
+    </div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:12px;">${filterSummary || 'All filters: none'}</div>
+    <div style="border:1px solid #E4E9EE;border-radius:16px;padding:12px;background:#fff;">
+      <canvas id="chart-preview-canvas" width="820" height="320"></canvas>
+    </div>`;
+  const body = document.getElementById('export-preview-body');
+  body.innerHTML = '';
+  body.appendChild(report);
+  document.getElementById('modal-export-preview').classList.remove('hidden');
+  previewReportElement = report;
+
+  const ctx = report.querySelector('#chart-preview-canvas');
+  if (previewChartInstance) previewChartInstance.destroy();
+  previewChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: charts.activity?.data?.labels || [],
+      datasets: charts.activity?.data?.datasets?.map(ds => ({ ...ds, fill: false })) || []
+    },
+    options: {
+      responsive: false,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#0B1A2B' }, grid: { color: 'rgba(11,26,43,0.06)', drawBorder: false } },
+        y: { ticks: { color: '#0B1A2B' }, grid: { color: 'rgba(11,26,43,0.06)' }, beginAtZero: true }
+      }
+    }
+  });
+});
+
+document.getElementById('btn-export-chart').addEventListener('click', async () => {
+  const filters = {
+    clientId: document.getElementById('a-client').value || '',
+    type: document.getElementById('a-type').value || '',
+    from: document.getElementById('a-from').value,
+    to: document.getElementById('a-to').value,
+    min: parseFloat(document.getElementById('a-min').value),
+    max: parseFloat(document.getElementById('a-max').value),
+  };
+  const { txns } = await getFilteredTransactions({ clientId: filters.clientId, type: filters.type, min: isNaN(filters.min) ? undefined : filters.min, max: isNaN(filters.max) ? undefined : filters.max, from: filters.from, to: filters.to });
+  const selectedClient = filters.clientId ? await db.clients.get(filters.clientId) : null;
+  const title = selectedClient ? `${selectedClient.name} • ${selectedClient.location || 'Location not set'}` : 'All clients';
+  const filterSummary = [selectedClient ? `Client: ${selectedClient.name}` : 'Client: All', filters.type ? `Type: ${filters.type}` : '', filters.from ? `From: ${filters.from}` : '', filters.to ? `To: ${filters.to}` : '', !isNaN(filters.min) ? `Min: ${fmtMoney(filters.min)}` : '', !isNaN(filters.max) ? `Max: ${fmtMoney(filters.max)}` : ''].filter(Boolean).join(' • ');
+  const report = document.createElement('div');
+  report.style.cssText = 'padding:24px; background:white; color:#0B1A2B; font-family:Inter, Arial, sans-serif; width:850px;';
+  report.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1E5B8C;padding-bottom:12px;">
+      <div>
+        <div style="font-size:24px;font-weight:800;color:#0B1A2B;">Uncle Atto's Savings App</div>
+        <div style="font-size:13px;color:#64748b;margin-top:4px;">Analytics report</div>
+      </div>
+      <div style="text-align:right;font-size:12px;color:#64748b;">Generated ${new Date().toLocaleString('en-GB')}</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0;padding:14px;border-radius:16px;background:#F5F7F8;">
+      <div style="display:flex;gap:12px;align-items:center;">
+        ${selectedClient?.photo ? `<img src="${selectedClient.photo}" style="width:72px;height:72px;border-radius:16px;object-fit:cover;">` : `<div style="width:72px;height:72px;border-radius:16px;background:#E8F7EE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0F9D74;font-size:24px;">${(selectedClient?.name || 'ALL').split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()}</div>`}
+        <div>
+          <div style="font-weight:700;font-size:16px;">${title}</div>
+          <div style="font-size:12px;color:#64748b;">${selectedClient ? `Phone: ${selectedClient.phone || '—'} • Location: ${selectedClient.location || 'Not set'}` : 'All active savings members'}</div>
+        </div>
+      </div>
+      <div style="text-align:right;font-size:13px;color:#0F9D74;font-weight:700;">${txns.length} records • ${fmtMoney(txns.reduce((s,t)=>s+t.amount,0))}</div>
+    </div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:12px;">${filterSummary || 'All filters: none'}</div>
+    <div style="border:1px solid #E4E9EE;border-radius:16px;padding:12px;background:#fff;">
+      <canvas id="chart-export-canvas" width="820" height="320"></canvas>
+    </div>`;
+
+  const exportCanvas = document.createElement('div');
+  exportCanvas.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;';
+  exportCanvas.appendChild(report);
+  document.body.appendChild(exportCanvas);
+  const ctx = document.getElementById('chart-export-canvas');
+  const exportChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: charts.activity?.data?.labels || [],
+      datasets: charts.activity?.data?.datasets?.map(ds => ({ ...ds, fill: false })) || []
+    },
+    options: {
+      responsive: false,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#0B1A2B' }, grid: { color: 'rgba(11,26,43,0.06)', drawBorder: false } },
+        y: { ticks: { color: '#0B1A2B' }, grid: { color: 'rgba(11,26,43,0.06)' }, beginAtZero: true }
+      }
+    }
+  });
+  toast('Preparing analytics PDF…');
+  html2pdf().set({ margin: 0.3, filename: 'uncle-atto-analytics.pdf', image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' } }).from(report).save().finally(() => {
+    exportChart.destroy();
+    exportCanvas.remove();
+  });
+});
+
+/* =========================================================================
+   THEME
+========================================================================= */
+function applyTheme(dark) {
+  document.documentElement.classList.toggle('dark', dark);
+  localStorage.setItem('lf_theme', dark ? 'dark' : 'light');
+  document.getElementById('settings-theme-label').textContent = dark ? 'Dark' : 'Light';
+  if (charts.week || charts.ratio) renderCharts();
+}
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  applyTheme(!document.documentElement.classList.contains('dark'));
+});
+
+/* =========================================================================
+   SETTINGS
+========================================================================= */
+async function renderSettings() {
+  document.getElementById('settings-online').textContent = navigator.onLine ? 'Online' : 'Offline';
+  document.getElementById('settings-online').className = 'text-sm font-medium ' + (navigator.onLine ? 'text-savings-500' : 'text-alert-500');
+  const pendingT = await db.transactions.filter(t => !t.synced).count();
+  const pendingC = await db.clients.filter(c => !c.synced).count();
+  document.getElementById('settings-pending').textContent = pendingT + pendingC;
+  document.getElementById('settings-currency').value = CURRENCY;
+
+  const archivedClients = (await db.clients.toArray()).filter(c => !!c.hidden);
+  const archivedList = document.getElementById('archived-clients-list');
+  const archivedCount = document.getElementById('settings-archived-count');
+  archivedCount.textContent = archivedClients.length;
+  if (archivedClients.length === 0) {
+    archivedList.innerHTML = '<p class="text-xs text-ink-900/50 dark:text-paper/50">No archived clients yet.</p>';
+  } else {
+    archivedList.innerHTML = archivedClients.map(c => `
+      <div class="flex items-center justify-between gap-3 rounded-xl bg-white/70 dark:bg-ink-800/70 px-3 py-2">
+        <div class="min-w-0">
+          <p class="text-sm font-medium truncate">${c.name}</p>
+          <p class="text-[11px] text-ink-900/50 dark:text-paper/50 truncate">${c.location || 'Location not set'}</p>
+        </div>
+        <button data-restore-client="${c.id}" class="tap text-xs font-medium text-savings-600 dark:text-savings-500">Restore</button>
+      </div>`).join('');
+  }
+  archivedList.querySelectorAll('[data-restore-client]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await db.clients.update(btn.getAttribute('data-restore-client'), { hidden: false, updatedAt: new Date().toISOString(), synced: false });
+      toast('Client restored to active list');
+      await populateClientFilters();
+      await renderSettings();
+      await refreshCurrentView();
+    });
+  });
+
+  const statusEl = document.getElementById('settings-cloud-status');
+  const descEl = document.getElementById('settings-cloud-desc');
+  if (isCloudConfigured()) {
+    statusEl.textContent = navigator.onLine ? 'Connected' : 'Connected (offline)';
+    statusEl.className = 'text-xs font-medium px-2 py-0.5 rounded-full bg-savings-500/10 text-savings-500';
+    descEl.textContent = 'This device is connected to your Supabase project. Changes made here sync to every other device signed into the same project, and their changes sync back here automatically.';
+  } else {
+    statusEl.textContent = 'Not connected';
+    statusEl.className = 'text-xs font-medium px-2 py-0.5 rounded-full bg-alert-500/10 text-alert-500';
+    descEl.textContent = 'Not connected yet, so data only lives on this device. Connect a free Supabase project once and every device signed into it — phone, tablet, desktop — will see the same clients and transactions live.';
+  }
+}
+document.getElementById('settings-currency').addEventListener('change', async (e) => {
+  CURRENCY = e.target.value;
+  localStorage.setItem('lf_currency', CURRENCY);
+  toast('Currency updated');
+  await refreshCurrentView();
+});
+document.getElementById('btn-force-sync').addEventListener('click', () => attemptSync(true));
+document.getElementById('btn-reset-data').addEventListener('click', async () => {
+  const password = window.prompt('To clear all data, enter the strong admin password:');
+  const expected = 'UAtto@2026!Secure';
+  if (password !== expected) {
+    toast('Access denied. The correct password is required.');
+    return;
+  }
+  if (!confirm('WARNING: This will permanently delete ALL clients and transactions from BOTH this device and your Supabase cloud database. Continue?')) return;
+  
+  toast('Clearing cloud data... please wait...');
+
+  // 1. Wipe the Supabase database tables safely if connected
+  if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+    try {
+      const localClients = await db.clients.toArray();
+      const localTransactions = await db.transactions.toArray();
+
+      const clientIds = localClients.map(c => c.id);
+      const transactionIds = localTransactions.map(t => t.id);
+
+      // Delete transactions first to keep database key constraints happy
+      if (transactionIds.length > 0) {
+        await supabaseClient.from('transactions').delete().in('id', transactionIds);
+      }
+      
+      // Delete clients second
+      if (clientIds.length > 0) {
+        await supabaseClient.from('clients').delete().in('id', clientIds);
+      }
+    } catch (err) {
+      console.error('Cloud clear failed, proceeding with local clear:', err);
+      toast('Cloud clear failed: ' + err.message);
+    }
+  }
+
+  // 2. Clear the local browser databases
+  await db.transactions.clear();
+  await db.clients.clear();
+  
+  toast('All local and cloud data completely wiped');
+  currentClientId = null;
+  await populateClientFilters();
+  await refreshCurrentView();
+});
+
+/* =========================================================================
+   CLOUD SYNC (Supabase) — real, live, multi-device sync.
+   Local Dexie is always the source of truth for the UI; this layer keeps it
+   in lock-step with a shared Supabase project so device A, B, C all agree.
+========================================================================= */
+function setOnlineBadge() {
+  const badge = document.getElementById('online-badge');
+  if (navigator.onLine) {
+    badge.textContent = isCloudConfigured() ? '● Online — synced' : '● Online';
+    badge.className = 'text-[11px] leading-none mt-1 text-savings-500 font-medium';
+  } else {
+    badge.textContent = '● Offline — saved locally';
+    badge.className = 'text-[11px] leading-none mt-1 text-loan-500 font-medium';
+  }
+}
+window.addEventListener('online', () => { setOnlineBadge(); attemptSync(); renderSettings(); });
+window.addEventListener('offline', () => { setOnlineBadge(); renderSettings(); });
+
+function initCloud() {
+  if (!isCloudConfigured() || !window.supabase) return;
+  try {
+    supabaseClient = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+    subscribeRealtime();
+  } catch (err) {
+    console.error('Supabase init failed', err);
+    supabaseClient = null;
+  }
+}
+
+// Local (camelCase) <-> remote (snake_case) field mapping.
+function clientToRemote(c) {
+  return { id: c.id, name: c.name, phone: c.phone, photo: c.photo || null, location: c.location || null, hidden: !!c.hidden, loan_eligible: !!c.loanEligible, created_at: c.createdAt, updated_at: c.updatedAt || c.createdAt };
+}
+function clientFromRemote(r) {
+  return { id: r.id, name: r.name, phone: r.phone, photo: r.photo || null, location: r.location || '', hidden: !!r.hidden, loanEligible: !!r.loan_eligible, createdAt: r.created_at, updatedAt: r.updated_at, synced: true };
+}
+function txnToRemote(t) {
+  return { id: t.id, client_id: t.clientId, type: t.type, amount: t.amount, note: t.note || '', timestamp: t.timestamp, updated_at: t.updatedAt || t.timestamp };
+}
+function txnFromRemote(r) {
+  return { id: r.id, clientId: r.client_id, type: r.type, amount: r.amount, note: r.note || '', timestamp: r.timestamp, updatedAt: r.updated_at, synced: true };
+}
+
+async function pushToCloud(table, record) {
+  if (!supabaseClient) return false;
+  const payload = table === 'clients' ? clientToRemote(record) : txnToRemote(record);
+  const { error } = await supabaseClient.from(table).upsert(payload);
+  if (error) { console.error(`Push to ${table} failed`, error); return false; }
+  return true;
+}
+
+// Pull the full shared dataset down and merge it into local storage. Any record
+// still pending a local push is left alone so an in-flight edit is never clobbered.
+async function pullFromCloud() {
+  if (!supabaseClient) return false;
+  let changed = false;
+  try {
+    const [{ data: remoteClients, error: e1 }, { data: remoteTxns, error: e2 }] = await Promise.all([
+      supabaseClient.from('clients').select('*'),
+      supabaseClient.from('transactions').select('*'),
+    ]);
+    if (e1 || e2) { console.error('Pull failed', e1 || e2); return false; }
+
+    for (const r of remoteClients || []) {
+      const local = await db.clients.get(r.id);
+      if (!local || (local.synced && local.updatedAt !== r.updated_at)) { await db.clients.put(clientFromRemote(r)); changed = true; }
+    }
+    for (const r of remoteTxns || []) {
+      const local = await db.transactions.get(r.id);
+      if (!local || (local.synced && local.updatedAt !== r.updated_at)) { await db.transactions.put(txnFromRemote(r)); changed = true; }
+    }
+  } catch (err) {
+    console.error('Pull from cloud failed', err);
+  }
+  return changed;
+}
+
+// Live updates: another device's change lands here within a second or two.
+function subscribeRealtime() {
+  if (!supabaseClient) return;
+  supabaseClient
+    .channel('uncle-atto-savings-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, async (payload) => {
+      if (payload.eventType === 'DELETE') await db.clients.delete(payload.old.id);
+      else await db.clients.put(clientFromRemote(payload.new));
+      toast('Updated from another device');
+      await populateClientFilters();
+      await refreshCurrentView();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, async (payload) => {
+      if (payload.eventType === 'DELETE') await db.transactions.delete(payload.old.id);
+      else await db.transactions.put(txnFromRemote(payload.new));
+      toast('Updated from another device');
+      await refreshCurrentView();
+    })
+    .subscribe();
+}
+
+let syncing = false;
+async function attemptSync(manual) {
+  if (!navigator.onLine || syncing) { if (manual) toast('Still offline — will sync automatically.'); return; }
+  if (!isCloudConfigured()) { if (manual) toast('Connect a cloud project in Settings to enable multi-device sync.'); return; }
+  if (!supabaseClient) initCloud();
+  syncing = true;
+
+  const pendingClients = await db.clients.filter(c => !c.synced).toArray();
+  const pendingTxns = await db.transactions.filter(t => !t.synced).toArray();
+
+  for (const c of pendingClients) {
+    try { if (await pushToCloud('clients', c)) await db.clients.update(c.id, { synced: true }); }
+    catch (err) { /* leave pending, retry next time */ }
+  }
+  for (const t of pendingTxns) {
+    try { if (await pushToCloud('transactions', t)) await db.transactions.update(t.id, { synced: true }); }
+    catch (err) { /* leave pending, retry next time */ }
+  }
+  const pulledChanges = await pullFromCloud();
+
+  syncing = false;
+  const total = pendingClients.length + pendingTxns.length;
+  if (manual) toast(total > 0 ? `Synced ${total} record(s).` : 'Everything is already synced.');
+  await renderSettings();
+  if (manual || total > 0 || pulledChanges) await refreshCurrentView();
+}
+
+/* =========================================================================
+   INIT
+========================================================================= */
+async function refreshCurrentView() {
+  const active = document.querySelector('.view.active').id.replace('view-', '');
+  if (active === 'client' && currentClientId) await openClient(currentClientId);
+  else showView(active === 'client' ? 'home' : active);
+}
+
+(async function init() {
+  applyTheme(localStorage.getItem('lf_theme') === 'dark' || (!localStorage.getItem('lf_theme') && window.matchMedia('(prefers-color-scheme: dark)').matches));
+  setOnlineBadge();
+  initCloud();
+  if (navigator.onLine && isCloudConfigured()) await pullFromCloud();
+  await populateClientFilters();
+  await renderHome();
+  attemptSync();
+  setInterval(attemptSync, 20000);
+})();
+</script>
+<script> // password aspect of the app, for local and cloud auth
+  const DEFAULT_APP_USER = 'admin';
+  const DEFAULT_APP_PASS = 'UAtto@2026!Secure';
+  const AUTH_TABLE = 'app_auth';
+
+  function getStoredAuth() {
+    return {
+      user: localStorage.getItem('ledgerAppUser') || DEFAULT_APP_USER,
+      pass: localStorage.getItem('ledgerAppPass') || DEFAULT_APP_PASS
+    };
+  }
+
+  function getPreferredTheme() {
+    return localStorage.getItem('lf_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  }
+
+  function applyAuthTheme(theme) {
+    const dark = theme === 'dark';
+    document.documentElement.classList.toggle('dark', dark);
+    localStorage.setItem('lf_theme', dark ? 'dark' : 'light');
+    const toggle = document.getElementById('theme-toggle-auth');
+    if (toggle) toggle.textContent = dark ? '☀ Light' : '🌙 Dark';
+  }
+
+  function showSplash() {
+    document.getElementById('splash-screen').style.display = 'flex';
+    document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('app-shell').style.display = 'none';
+  }
+
+  function hideSplash() {
+    const splash = document.getElementById('splash-screen');
+    splash.classList.add('hidden');
+    setTimeout(() => {
+      splash.style.display = 'none';
+    }, 450);
+  }
+
+  function showLogin() {
+    hideSplash();
+    document.getElementById('login-overlay').style.display = 'flex';
+    document.getElementById('app-shell').style.display = 'none';
+    const auth = getStoredAuth();
+    document.getElementById('login-username').value = auth.user;
+    document.getElementById('login-password').value = '';
+    document.getElementById('login-error').textContent = '';
+    document.getElementById('login-error').style.color = '#D0503A';
+  }
+
+  function unlockApp() {
+    hideSplash();
+    document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('app-shell').style.display = 'flex';
+    sessionStorage.setItem('ledgerAppAuth', 'true');
+  }
+
+  function triggerLoginError() {
+    const card = document.querySelector('.login-card');
+    card.classList.remove('shake');
+    void card.offsetWidth;
+    card.classList.add('shake');
+    document.getElementById('login-error').textContent = 'Incorrect username or password.';
+  }
+
+  async function verifyAgainstServer(user, pass) {
+    if (!window.supabase || !supabaseClient) {
+      initCloud();
+    }
+    if (!supabaseClient) return null;
+    try {
+      const { data, error } = await supabaseClient
+        .from(AUTH_TABLE)
+        .select('username, password')
+        .eq('username', user)
+        .eq('password', pass)
+        .maybeSingle();
+      if (error) {
+        console.warn('Server auth lookup failed:', error);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.warn('Server auth lookup failed:', err);
+      return null;
+    }
+  }
+
+  async function saveCredentialsToServer(user, pass) {
+    if (!window.supabase || !supabaseClient) {
+      initCloud();
+    }
+    if (!supabaseClient) return false;
+    try {
+      const payload = {
+        username: user,
+        password: pass,
+        updated_at: new Date().toISOString()
+      };
+      const { error } = await supabaseClient.from(AUTH_TABLE).upsert(payload, { onConflict: 'username' });
+      if (error) {
+        console.warn('Could not save to server auth table:', error);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('Could not save to server auth table:', err);
+      return false;
+    }
+  }
+
+  async function attemptLogin() {
+    const enteredUser = document.getElementById('login-username').value.trim();
+    const enteredPass = document.getElementById('login-password').value;
+    const auth = getStoredAuth();
+
+    if (!enteredUser || !enteredPass) {
+      triggerLoginError();
+      document.getElementById('login-error').textContent = 'Please enter both fields.';
+      return;
+    }
+
+    const serverMatch = await verifyAgainstServer(enteredUser, enteredPass);
+    const localMatch = enteredUser === auth.user && enteredPass === auth.pass;
+
+    if (serverMatch || localMatch) {
+      unlockApp();
+    } else {
+      triggerLoginError();
+    }
+  }
+
+  async function saveCredentials() {
+    const user = document.getElementById('login-username').value.trim();
+    const pass = document.getElementById('login-password').value;
+    if (!user || !pass) {
+      document.getElementById('login-error').textContent = 'Please enter both username and password.';
+      return;
+    }
+
+    localStorage.setItem('ledgerAppUser', user);
+    localStorage.setItem('ledgerAppPass', pass);
+    const serverSaved = await saveCredentialsToServer(user, pass);
+
+    document.getElementById('login-error').textContent = serverSaved ? 'Credentials saved securely.' : 'Credentials saved locally for this device.';
+    document.getElementById('login-error').style.color = '#0F9D74';
+  }
+
+  document.getElementById('theme-toggle-auth').addEventListener('click', () => {
+    applyAuthTheme(document.documentElement.classList.contains('dark') ? 'light' : 'dark');
+  });
+  document.getElementById('login-submit').addEventListener('click', async () => {
+    await attemptLogin();
+  });
+  document.getElementById('login-save').addEventListener('click', async () => {
+    await saveCredentials();
+  });
+  ['login-username', 'login-password'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        attemptLogin();
+      }
+    });
+  });
+
+  applyAuthTheme(getPreferredTheme());
+  showSplash();
+  setTimeout(() => {
+    if (sessionStorage.getItem('ledgerAppAuth') === 'true') {
+      unlockApp();
+    } else {
+      showLogin();
+    }
+  }, 1400);
+
+  window.addEventListener('beforeunload', () => {
+    sessionStorage.removeItem('ledgerAppAuth');
+  });
+</script>
+</body>
+</html>
