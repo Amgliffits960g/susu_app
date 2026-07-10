@@ -66,10 +66,43 @@
   .font-display { font-family: 'Space Grotesk', sans-serif; }
   .font-mono-num { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
 
-  /* app shell — a phone-width "passbook" even on desktop */
-  #app-shell { max-width: 480px; margin: 0 auto; min-height: 100vh; position: relative; }
+  /* app shell — responsive layout for phone, tablet, and desktop */
+  #app-shell { width: 100%; max-width: 480px; margin: 0 auto; min-height: 100vh; position: relative; }
+  @media (min-width: 640px) {
+    #app-shell { max-width: 720px; }
+  }
+  @media (min-width: 900px) {
+    #app-shell { max-width: 980px; }
+  }
+  @media (min-width: 1200px) {
+    #app-shell { max-width: 1180px; }
+  }
   @media (min-width: 481px) {
     #app-shell { box-shadow: 0 0 60px rgba(11,26,43,0.12); }
+  }
+
+  @media (min-width: 768px) {
+    body { background: #F1F5F9; }
+    #app-shell { padding: 0 16px; }
+    header .flex { max-width: 1100px; margin: 0 auto; padding-left: 0; padding-right: 0; }
+    .view { padding-left: 0.75rem; padding-right: 0.75rem; }
+  }
+
+  @media (min-width: 992px) {
+    #app-shell { padding: 0 24px; }
+    .view { padding-left: 0; padding-right: 0; }
+    .view.active { max-width: 1100px; margin: 0 auto; }
+    .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-cols-2.gap-3 { gap: 1.25rem; }
+    .rounded-2xl.p-4 { padding: 1.5rem; }
+  }
+
+  @media (min-width: 1200px) {
+    #app-shell { padding: 0 32px; }
+    header .flex { max-width: 1160px; }
+    .view.active { max-width: 1160px; }
+    .grid-cols-2.gap-3 { gap: 1.5rem; }
+    .rounded-2xl.p-4 { padding: 1.75rem; }
   }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -617,7 +650,7 @@ alter publication supabase_realtime add table clients, transactions;</pre>
 ========================================================================= */
 const CONFIG = {
   SUPABASE_URL: 'https://pzxzjckkfynotozzcbyw.supabase.co',
-  SUPABASE_ANON_KEY: 'sb_publishable_fX1F_s060uH5ElZEg9TFMA_9NxxBapH'
+  SUPABASE_ANON_KEY: 'sb_publishable_B1i2mE4LhOaAYmfFT0zimg_UXJv1uDb'
 };
 
 function isCloudConfigured() {
@@ -626,6 +659,25 @@ function isCloudConfigured() {
     && !CONFIG.SUPABASE_ANON_KEY.includes('YOUR_SUPABASE_ANON_KEY');
 }
 let supabaseClient = null;
+let supabaseConnected = false;
+
+async function verifyCloudConnection() {
+  if (!supabaseClient) return false;
+  try {
+    const { data, error } = await supabaseClient.from('clients').select('id').limit(1);
+    if (error) {
+      console.error('Supabase reachability check failed:', error);
+      supabaseConnected = false;
+      return false;
+    }
+    supabaseConnected = Array.isArray(data);
+    return supabaseConnected;
+  } catch (err) {
+    console.error('Supabase reachability check threw:', err);
+    supabaseConnected = false;
+    return false;
+  }
+}
 
 /* =========================================================================
    DATABASE (Dexie / IndexedDB)
@@ -1753,8 +1805,18 @@ document.getElementById('btn-reset-data').addEventListener('click', async () => 
 function setOnlineBadge() {
   const badge = document.getElementById('online-badge');
   if (navigator.onLine) {
-    badge.textContent = isCloudConfigured() ? '● Online — synced' : '● Online';
-    badge.className = 'text-[11px] leading-none mt-1 text-savings-500 font-medium';
+    if (isCloudConfigured()) {
+      if (supabaseConnected) {
+        badge.textContent = '● Online — synced';
+        badge.className = 'text-[11px] leading-none mt-1 text-savings-500 font-medium';
+      } else {
+        badge.textContent = '● Online — cloud unreachable';
+        badge.className = 'text-[11px] leading-none mt-1 text-alert-500 font-medium';
+      }
+    } else {
+      badge.textContent = '● Online';
+      badge.className = 'text-[11px] leading-none mt-1 text-savings-500 font-medium';
+    }
   } else {
     badge.textContent = '● Offline — saved locally';
     badge.className = 'text-[11px] leading-none mt-1 text-loan-500 font-medium';
@@ -1768,9 +1830,11 @@ function initCloud() {
   try {
     supabaseClient = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
     subscribeRealtime();
+    verifyCloudConnection().then(() => setOnlineBadge()).catch(() => setOnlineBadge());
   } catch (err) {
     console.error('Supabase init failed', err);
     supabaseClient = null;
+    supabaseConnected = false;
   }
 }
 
@@ -1806,7 +1870,11 @@ async function pullFromCloud() {
       supabaseClient.from('clients').select('*'),
       supabaseClient.from('transactions').select('*'),
     ]);
-    if (e1 || e2) { console.error('Pull failed', e1 || e2); return false; }
+    if (e1 || e2) {
+      console.error('Pull failed', e1 || e2);
+      toast('Cloud pull failed. Check your Supabase tables and policies.');
+      return false;
+    }
 
     for (const r of remoteClients || []) {
       const local = await db.clients.get(r.id);
@@ -1818,6 +1886,7 @@ async function pullFromCloud() {
     }
   } catch (err) {
     console.error('Pull from cloud failed', err);
+    toast('Cloud pull failed. See console for details.');
   }
   return changed;
 }
@@ -1848,18 +1917,31 @@ async function attemptSync(manual) {
   if (!navigator.onLine || syncing) { if (manual) toast('Still offline — will sync automatically.'); return; }
   if (!isCloudConfigured()) { if (manual) toast('Connect a cloud project in Settings to enable multi-device sync.'); return; }
   if (!supabaseClient) initCloud();
+  if (!supabaseClient) { if (manual) toast('Cloud sync is not available yet.'); return; }
+  const connected = await verifyCloudConnection();
+  setOnlineBadge();
+  if (!connected) {
+    if (manual) toast('Cloud project not reachable. Check your Supabase URL and key.');
+    return;
+  }
   syncing = true;
 
   const pendingClients = await db.clients.filter(c => !c.synced).toArray();
   const pendingTxns = await db.transactions.filter(t => !t.synced).toArray();
 
   for (const c of pendingClients) {
-    try { if (await pushToCloud('clients', c)) await db.clients.update(c.id, { synced: true }); }
-    catch (err) { /* leave pending, retry next time */ }
+    try {
+      if (await pushToCloud('clients', c)) await db.clients.update(c.id, { synced: true });
+    } catch (err) {
+      console.error('Client push failed', err);
+    }
   }
   for (const t of pendingTxns) {
-    try { if (await pushToCloud('transactions', t)) await db.transactions.update(t.id, { synced: true }); }
-    catch (err) { /* leave pending, retry next time */ }
+    try {
+      if (await pushToCloud('transactions', t)) await db.transactions.update(t.id, { synced: true });
+    } catch (err) {
+      console.error('Transaction push failed', err);
+    }
   }
   const pulledChanges = await pullFromCloud();
 
