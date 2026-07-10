@@ -660,6 +660,7 @@ function isCloudConfigured() {
 }
 let supabaseClient = null;
 let supabaseConnected = false;
+let supabaseConnectionError = null;
 
 async function verifyCloudConnection() {
   if (!supabaseClient) return false;
@@ -668,13 +669,16 @@ async function verifyCloudConnection() {
     if (error) {
       console.error('Supabase reachability check failed:', error);
       supabaseConnected = false;
+      supabaseConnectionError = error;
       return false;
     }
     supabaseConnected = Array.isArray(data);
+    supabaseConnectionError = null;
     return supabaseConnected;
   } catch (err) {
     console.error('Supabase reachability check threw:', err);
     supabaseConnected = false;
+    supabaseConnectionError = err;
     return false;
   }
 }
@@ -1736,9 +1740,19 @@ async function renderSettings() {
   const statusEl = document.getElementById('settings-cloud-status');
   const descEl = document.getElementById('settings-cloud-desc');
   if (isCloudConfigured()) {
-    statusEl.textContent = navigator.onLine ? 'Connected' : 'Connected (offline)';
-    statusEl.className = 'text-xs font-medium px-2 py-0.5 rounded-full bg-savings-500/10 text-savings-500';
-    descEl.textContent = 'This device is connected to your Supabase project. Changes made here sync to every other device signed into the same project, and their changes sync back here automatically.';
+    if (!navigator.onLine) {
+      statusEl.textContent = 'Connected (offline)';
+      statusEl.className = 'text-xs font-medium px-2 py-0.5 rounded-full bg-savings-500/10 text-savings-500';
+      descEl.textContent = 'This device is configured for Supabase, but is currently offline. Changes will sync once connectivity is restored.';
+    } else if (supabaseConnected) {
+      statusEl.textContent = 'Connected';
+      statusEl.className = 'text-xs font-medium px-2 py-0.5 rounded-full bg-savings-500/10 text-savings-500';
+      descEl.textContent = 'This device is connected to your Supabase project. Changes made here sync to every other device signed into the same project.';
+    } else {
+      statusEl.textContent = 'Cloud unreachable';
+      statusEl.className = 'text-xs font-medium px-2 py-0.5 rounded-full bg-alert-500/10 text-alert-500';
+      descEl.textContent = 'Configured correctly but unable to contact Supabase. Check your URL/key, policies, and that the clients/transactions tables exist.';
+    }
   } else {
     statusEl.textContent = 'Not connected';
     statusEl.className = 'text-xs font-medium px-2 py-0.5 rounded-full bg-alert-500/10 text-alert-500';
@@ -1921,7 +1935,9 @@ async function attemptSync(manual) {
   const connected = await verifyCloudConnection();
   setOnlineBadge();
   if (!connected) {
-    if (manual) toast('Cloud project not reachable. Check your Supabase URL and key.');
+    const message = supabaseConnectionError?.message || 'Unknown error';
+    if (manual) toast(`Cloud project not reachable: ${message}`);
+    console.error('Supabase connection error:', supabaseConnectionError);
     return;
   }
   syncing = true;
