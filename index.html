@@ -1525,6 +1525,7 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
   try {
     toast('Preparing Excel export...');
     if (typeof XLSX === 'undefined') { toast('Excel export library not loaded'); return; }
+    let truncatedPhotos = false;
     const { txns } = await getFilteredTransactions();
     const clients = await db.clients.toArray();
     const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
@@ -1534,6 +1535,16 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
   const rows = [headers];
   for (const t of txns) {
     const c = clientDetails[t.clientId] || {};
+    // Protect Excel cell size limit by truncating very large data URLs
+    let photoVal = '';
+    if (c.photo) {
+      if (typeof c.photo === 'string' && c.photo.length > 30000) {
+        photoVal = c.photo.slice(0, 30000) + '... (truncated)';
+        truncatedPhotos = true;
+      } else {
+        photoVal = c.photo;
+      }
+    }
     rows.push([
       new Date(t.timestamp).toLocaleString('en-GB'),
       t.id,
@@ -1545,7 +1556,7 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
       t.amount,
       t.note || '',
       !!t.synced,
-      c.photo || ''
+      photoVal
     ]);
   }
 
@@ -1553,7 +1564,16 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
   const clientHeaders = ['Client ID','Name','Phone','Location','Loan eligible','Hidden','Created at','Updated at','Photo (data URL)'];
   const clientRows = [clientHeaders];
   for (const c of clients) {
-    clientRows.push([c.id, c.name, c.phone || '', c.location || '', !!c.loanEligible, !!c.hidden, c.createdAt || '', c.updatedAt || '', c.photo || '']);
+    let clientPhotoVal = '';
+    if (c.photo) {
+      if (typeof c.photo === 'string' && c.photo.length > 30000) {
+        clientPhotoVal = c.photo.slice(0,30000) + '... (truncated)';
+        truncatedPhotos = true;
+      } else {
+        clientPhotoVal = c.photo;
+      }
+    }
+    clientRows.push([c.name,]);
   }
 
   const wb = XLSX.utils.book_new();
@@ -1564,7 +1584,8 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
 
     const fname = `uncle-atto-ledger-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.xlsx`;
     XLSX.writeFile(wb, fname);
-    toast('Exported Excel');
+    if (truncatedPhotos) toast('Exported Excel (some photos were truncated due to size limits)');
+    else toast('Exported Excel');
   } catch (err) {
     console.error('Excel export failed', err);
     toast('Excel export failed: ' + (err && err.message ? err.message : 'See console'));
