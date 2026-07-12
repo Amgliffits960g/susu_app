@@ -1473,9 +1473,11 @@ document.getElementById('btn-preview-pdf').addEventListener('click', async () =>
 
 // Export ledger as JSON (includes client details and photos as data URLs)
 document.getElementById('btn-export-json').addEventListener('click', async () => {
-  const { txns } = await getFilteredTransactions();
-  const clients = await db.clients.toArray();
-  const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
+  try {
+    toast('Preparing JSON export...');
+    const { txns } = await getFilteredTransactions();
+    const clients = await db.clients.toArray();
+    const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
   const records = txns.map(t => {
     const c = clientDetails[t.clientId] || {};
     return {
@@ -1501,24 +1503,31 @@ document.getElementById('btn-export-json').addEventListener('click', async () =>
     };
   });
   const payload = { generatedAt: new Date().toISOString(), total: records.length, records };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `uncle-atto-ledger-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-  toast('Exported JSON');
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = `uncle-atto-ledger-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+    document.body.appendChild(a);
+    // trigger click in a robust way
+    a.dispatchEvent(new MouseEvent('click'));
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1000);
+    toast('Exported JSON');
+  } catch (err) {
+    console.error('JSON export failed', err);
+    toast('JSON export failed: ' + (err && err.message ? err.message : 'See console'));
+  }
 });
 
 // Export ledger as Excel (XLSX) using SheetJS
 document.getElementById('btn-export-excel').addEventListener('click', async () => {
-  if (typeof XLSX === 'undefined') { toast('Excel export library not loaded'); return; }
-  const { txns } = await getFilteredTransactions();
-  const clients = await db.clients.toArray();
-  const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
+  try {
+    toast('Preparing Excel export...');
+    if (typeof XLSX === 'undefined') { toast('Excel export library not loaded'); return; }
+    const { txns } = await getFilteredTransactions();
+    const clients = await db.clients.toArray();
+    const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
 
   // Build rows for the main sheet
   const headers = ['Date', 'Transaction ID', 'Client ID', 'Client name', 'Phone', 'Location', 'Type', 'Amount', 'Note', 'Synced', 'Client photo (data URL)'];
@@ -1553,9 +1562,13 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
   XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
   XLSX.utils.book_append_sheet(wb, wsClients, 'Clients');
 
-  const fname = `uncle-atto-ledger-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.xlsx`;
-  XLSX.writeFile(wb, fname);
-  toast('Exported Excel');
+    const fname = `uncle-atto-ledger-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.xlsx`;
+    XLSX.writeFile(wb, fname);
+    toast('Exported Excel');
+  } catch (err) {
+    console.error('Excel export failed', err);
+    toast('Excel export failed: ' + (err && err.message ? err.message : 'See console'));
+  }
 });
 
 document.getElementById('btn-export-pdf').addEventListener('click', async () => {
