@@ -1531,7 +1531,7 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
     const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
 
   // Build rows for the main sheet
-  const headers = ['Date', 'Transaction ID', 'Client ID', 'Client name', 'Phone', 'Location', 'Type', 'Amount', 'Note', 'Synced', 'Client photo (data URL)'];
+  const headers = ['Date', 'Transaction ID', 'Client ID', 'Client name', 'Phone', 'Location', 'Type', 'Amount', 'Note', 'Synced'];
   const rows = [headers];
   for (const t of txns) {
     const c = clientDetails[t.clientId] || {};
@@ -1561,7 +1561,7 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
   }
 
   // Also add a Clients sheet with full client data
-  const clientHeaders = ['Client ID','Name','Phone','Location','Loan eligible','Hidden','Created at','Updated at','Photo (data URL)'];
+  const clientHeaders = ['Client ID','Name','Phone','Location','Loan eligible','Hidden','Created at','Updated at'];
   const clientRows = [clientHeaders];
   for (const c of clients) {
     let clientPhotoVal = '';
