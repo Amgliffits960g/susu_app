@@ -1524,68 +1524,64 @@ document.getElementById('btn-export-json').addEventListener('click', async () =>
 document.getElementById('btn-export-excel').addEventListener('click', async () => {
   try {
     toast('Preparing Excel export...');
-    if (typeof XLSX === 'undefined') { toast('Excel export library not loaded'); return; }
-    let truncatedPhotos = false;
+    if (typeof XLSX === 'undefined') { 
+      toast('Excel export library not loaded'); 
+      return; 
+    }
+    
     const { txns } = await getFilteredTransactions();
     const clients = await db.clients.toArray();
     const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
 
-  // Build rows for the main sheet
-  const headers = ['Date', 'Transaction ID', 'Client ID', 'Client name', 'Phone', 'Location', 'Type', 'Amount', 'Note', 'Synced'];
-  const rows = [headers];
-  for (const t of txns) {
-    const c = clientDetails[t.clientId] || {};
-    // Protect Excel cell size limit by truncating very large data URLs
-    let photoVal = '';
-    if (c.photo) {
-      if (typeof c.photo === 'string' && c.photo.length > 30000) {
-        photoVal = c.photo.slice(0, 30000) + '... (truncated)';
-        truncatedPhotos = true;
-      } else {
-        photoVal = c.photo;
-      }
+    // Build rows for the main sheet
+    const headers = ['Date', 'Transaction ID', 'Client ID', 'Client name', 'Phone', 'Location', 'Type', 'Amount', 'Note', 'Synced'];
+    const rows = [headers];
+    
+    for (const t of txns) {
+      const c = clientDetails[t.clientId] || {};
+      
+      rows.push([
+        new Date(t.timestamp).toLocaleString('en-GB'),
+        t.id,
+        t.clientId,
+        c.name || '',
+        c.phone || '',
+        c.location || '',
+        t.type,
+        t.amount,
+        t.note || '',
+        !!t.synced
+      ]);
     }
-    rows.push([
-      new Date(t.timestamp).toLocaleString('en-GB'),
-      t.id,
-      t.clientId,
-      c.name || '',
-      c.phone || '',
-      c.location || '',
-      t.type,
-      t.amount,
-      t.note || '',
-      !!t.synced,
-      photoVal
-    ]);
-  }
 
-  // Also add a Clients sheet with full client data
-  const clientHeaders = ['Client ID','Name','Phone','Location','Loan eligible','Hidden','Created at','Updated at'];
-  const clientRows = [clientHeaders];
-  for (const c of clients) {
-    let clientPhotoVal = '';
-    if (c.photo) {
-      if (typeof c.photo === 'string' && c.photo.length > 30) {
-        clientPhotoVal = c.photo.slice(0,30) + '... (truncated)';
-        truncatedPhotos = true;
-      } else {
-        clientPhotoVal = c.photo;
-      }
+    // Add a Clients sheet with full client data
+    const clientHeaders = ['Client ID', 'Name', 'Phone', 'Location', 'Loan eligible', 'Hidden', 'Created at', 'Updated at'];
+    const clientRows = [clientHeaders];
+    
+    for (const c of clients) {
+      clientRows.push([
+        c.id || '',
+        c.name || '',
+        c.phone || '',
+        c.location || '',
+        c.loanEligible ? 'Yes' : 'No',
+        c.hidden ? 'Yes' : 'No',
+        c.createdAt ? new Date(c.createdAt).toLocaleString('en-GB') : '',
+        c.updatedAt ? new Date(c.updatedAt).toLocaleString('en-GB') : ''
+      ]);
     }
-    clientRows.push([c.name,]);
-  }
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  const wsClients = XLSX.utils.aoa_to_sheet(clientRows);
-  XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
-  XLSX.utils.book_append_sheet(wb, wsClients, 'Clients');
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wsClients = XLSX.utils.aoa_to_sheet(clientRows);
+    
+    XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
+    XLSX.utils.book_append_sheet(wb, wsClients, 'Clients');
 
     const fname = `uncle-atto-ledger-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.xlsx`;
     XLSX.writeFile(wb, fname);
-    if (truncatedPhotos) toast('Exported Excel (some photos were truncated due to size limits)');
-    else toast('Exported Excel');
+    
+    toast('Exported Excel');
   } catch (err) {
     console.error('Excel export failed', err);
     toast('Excel export failed: ' + (err && err.message ? err.message : 'See console'));
