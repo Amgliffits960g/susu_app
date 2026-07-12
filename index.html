@@ -1533,55 +1533,94 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
     const clients = await db.clients.toArray();
     const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
 
-    // Build rows for the main sheet
-    const headers = ['Date', 'Transaction ID', 'Client ID', 'Client name', 'Phone', 'Location', 'Type', 'Amount', 'Note', 'Synced'];
-    const rows = [headers];
+    // Helper to extract a friendly long date string (e.g., "12 July 2026")
+    const getLongDate = (dateObj) => {
+      return dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    };
+
+    // Helper to extract clean time (e.g., "11:52")
+    const getTimeString = (dateObj) => {
+      return dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    };
+
+    // ==========================================
+    // 1. BUILD LEDGER SHEET
+    // ==========================================
+    const ledgerHeaders = ['No.', 'Date', 'Time', 'Transaction ID', 'Client ID', 'Client name', 'Phone', 'Location', 'Type', 'Amount', 'Note', 'Synced'];
+    const ledgerRows = [ledgerHeaders];
     
+    let ledgerIndex = 1;
     for (const t of txns) {
       const c = clientDetails[t.clientId] || {};
+      const tDate = new Date(t.timestamp);
       
-      rows.push([
-        new Date(t.timestamp).toLocaleString('en-GB'),
-        t.id,
-        t.clientId,
-        c.name || '',
-        c.phone || '',
-        c.location || '',
-        t.type,
-        t.amount,
-        t.note || '',
-        !!t.synced
+      ledgerRows.push([
+        { v: ledgerIndex++, t: 'n' },                           // Column A: Numbering
+        { v: getLongDate(tDate), t: 's' },                      // Long Date
+        { v: getTimeString(tDate), t: 's' },                    // Separated Time
+        { v: t.id || '', t: 's' },
+        { v: t.clientId || '', t: 's' },
+        { v: c.name || '', t: 's' },
+        { v: c.phone || '', t: 's' },
+        { v: c.location || '', t: 's' },
+        { v: t.type || '', t: 's' },
+        { v: Number(t.amount) || 0, t: 'n', z: '"GH₵ "#,##0.00' }, // Ghana Cedis Currency Format
+        { v: t.note || '', t: 's' },
+        { v: t.synced ? 'Yes' : 'No', t: 's' }
       ]);
     }
 
-    // Add a Clients sheet with full client data
-    const clientHeaders = ['Client ID', 'Name', 'Phone', 'Location', 'Loan eligible', 'Hidden', 'Created at', 'Updated at'];
+    // ==========================================
+    // 2. BUILD CLIENTS SHEET
+    // ==========================================
+    const clientHeaders = ['No.', 'Client ID', 'Name', 'Phone', 'Location', 'Loan eligible', 'Hidden', 'Created Date', 'Created Time', 'Updated Date', 'Updated Time'];
     const clientRows = [clientHeaders];
     
+    let clientIndex = 1;
     for (const c of clients) {
+      const cDate = c.createdAt ? new Date(c.createdAt) : null;
+      const uDate = c.updatedAt ? new Date(c.updatedAt) : null;
+
       clientRows.push([
-        c.id || '',
-        c.name || '',
-        c.phone || '',
-        c.location || '',
-        c.loanEligible ? 'Yes' : 'No',
-        c.hidden ? 'Yes' : 'No',
-        c.createdAt ? new Date(c.createdAt).toLocaleString('en-GB') : '',
-        c.updatedAt ? new Date(c.updatedAt).toLocaleString('en-GB') : ''
+        { v: clientIndex++, t: 'n' },                           // Column A: Numbering
+        { v: c.id || '', t: 's' },
+        { v: c.name || '', t: 's' },
+        { v: c.phone || '', t: 's' },
+        { v: c.location || '', t: 's' },
+        { v: c.loanEligible ? 'Yes' : 'No', t: 's' },
+        { v: c.hidden ? 'Yes' : 'No', t: 's' },
+        { v: cDate ? getLongDate(cDate) : '', t: 's' },
+        { v: cDate ? getTimeString(cDate) : '', t: 's' },
+        { v: uDate ? getLongDate(uDate) : '', t: 's' },
+        { v: uDate ? getTimeString(uDate) : '', t: 's' }
       ]);
     }
 
+    // ==========================================
+    // 3. GENERATE AND CONFIGURE WORKBOOK
+    // ==========================================
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(rows);
+    
+    // Convert arrays into actual sheet objects
+    const ws = XLSX.utils.aoa_to_sheet(ledgerRows);
     const wsClients = XLSX.utils.aoa_to_sheet(clientRows);
     
+    // Apply a fixed structural width of 25 characters to all active columns
+    const fixedWidthsLedger = ledgerHeaders.map(() => ({ wch: 25 }));
+    const fixedWidthsClients = clientHeaders.map(() => ({ wch: 25 }));
+    
+    ws['!cols'] = fixedWidthsLedger;
+    wsClients['!cols'] = fixedWidthsClients;
+
+    // Append sheets to workbook
     XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
     XLSX.utils.book_append_sheet(wb, wsClients, 'Clients');
 
+    // Create file name and trigger local browser download
     const fname = `uncle-atto-ledger-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.xlsx`;
     XLSX.writeFile(wb, fname);
     
-    toast('Exported Excel');
+    toast('Exported Excel with custom formats');
   } catch (err) {
     console.error('Excel export failed', err);
     toast('Excel export failed: ' + (err && err.message ? err.message : 'See console'));
