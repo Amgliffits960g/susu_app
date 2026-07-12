@@ -1520,7 +1520,7 @@ document.getElementById('btn-export-json').addEventListener('click', async () =>
   }
 });
 
-// Export ledger as Excel (XLSX) using SheetJS (with styling support)
+// Export ledger as Excel (XLSX) using SheetJS with HTML-based styling
 document.getElementById('btn-export-excel').addEventListener('click', async () => {
   try {
     toast('Preparing Excel export...');
@@ -1533,132 +1533,127 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
     const clients = await db.clients.toArray();
     const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
 
-    // Helper to extract a friendly long date string (e.g., "12 July 2026")
-    const getLongDate = (dateObj) => {
-      return dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-    };
+    const getLongDate = (dateObj) => dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    const getTimeString = (dateObj) => dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // Helper to extract clean time (e.g., "11:52")
-    const getTimeString = (dateObj) => {
-      return dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    };
-
-    // Shared styling object for the table headers (Navy Blue Background, White Bold Text)
-    const headerStyle = {
-      fill: { fgColor: { rgb: "1F4E78" } }, // Deep Navy Blue
-      font: { name: "Arial", size: 11, bold: true, color: { rgb: "FFFFFF" } },
-      alignment: { horizontal: "center", vertical: "center" }
-    };
-
-    // Helper to format raw text headers into styled cell objects
-    const createStyledHeaders = (headersArray) => {
-      return headersArray.map(headerText => ({ v: headerText, t: 's', s: headerStyle }));
-    };
+    // Stylesheet rules that SheetJS reads successfully during conversion
+    const thStyle = 'style="background-color: #1F4E78; color: #FFFFFF; font-weight: bold; font-family: Arial; text-align: center;"';
 
     // ==========================================
-    // 1. BUILD LEDGER SHEET
+    // 1. GENERATE LEDGER HTML TABLE
     // ==========================================
-    const ledgerHeaders = ['No.', 'Date', 'Time', 'Transaction ID', 'Client ID', 'Client name', 'Phone', 'Location', 'Type', 'Amount', 'Note', 'Synced'];
-    const ledgerRows = [createStyledHeaders(ledgerHeaders)]; // Apply styling to row 0
+    let ledgerHtml = `<table>
+      <thead>
+        <tr>
+          <th ${thStyle}>No.</th><th ${thStyle}>Date</th><th ${thStyle}>Time</th>
+          <th ${thStyle}>Transaction ID</th><th ${thStyle}>Client ID</th><th ${thStyle}>Client name</th>
+          <th ${thStyle}>Phone</th><th ${thStyle}>Location</th><th ${thStyle}>Type</th>
+          <th ${thStyle}>Amount</th><th ${thStyle}>Note</th><th ${thStyle}>Synced</th>
+        </tr>
+      </thead>
+      <tbody>`;
     
     let ledgerIndex = 1;
     for (const t of txns) {
       const c = clientDetails[t.clientId] || {};
       const tDate = new Date(t.timestamp);
-      
-      ledgerRows.push([
-        { v: ledgerIndex++, t: 'n' }, 
-        { v: getLongDate(tDate), t: 's' }, 
-        { v: getTimeString(tDate), t: 's' }, 
-        { v: t.id || '', t: 's' },
-        { v: t.clientId || '', t: 's' },
-        { v: c.name || '', t: 's' },
-        { v: c.phone || '', t: 's' },
-        { v: c.location || '', t: 's' },
-        { v: t.type || '', t: 's' },
-        { v: Number(t.amount) || 0, t: 'n', z: '"GH₵ "#,##0.00' }, // Ghana Cedis
-        { v: t.note || '', t: 's' },
-        { v: t.synced ? 'Yes' : 'No', t: 's' }
-      ]);
+      const amt = Number(t.amount) || 0;
+
+      ledgerHtml += `<tr>
+        <td>${ledgerIndex++}</td>
+        <td>${getLongDate(tDate)}</td>
+        <td>${getTimeString(tDate)}</td>
+        <td>${t.id || ''}</td>
+        <td>${t.clientId || ''}</td>
+        <td>${c.name || ''}</td>
+        <td>${c.phone || ''}</td>
+        <td>${c.location || ''}</td>
+        <td>${t.type || ''}</td>
+        <td data-t="n" data-z='"GH₵ "#,##0.00'>${amt}</td>
+        <td>${t.note || ''}</td>
+        <td>${t.synced ? 'Yes' : 'No'}</td>
+      </tr>`;
     }
+    ledgerHtml += `</tbody></table>`;
 
     // ==========================================
-    // 2. BUILD CLIENTS SHEET
+    // 2. GENERATE CLIENTS HTML TABLE
     // ==========================================
-    const clientHeaders = ['No.', 'Client ID', 'Name', 'Phone', 'Location', 'Loan eligible', 'Hidden', 'Created Date', 'Created Time', 'Updated Date', 'Updated Time'];
-    const clientRows = [createStyledHeaders(clientHeaders)]; // Apply styling to row 0
+    let clientsHtml = `<table>
+      <thead>
+        <tr>
+          <th ${thStyle}>No.</th><th ${thStyle}>Client ID</th><th ${thStyle}>Name</th>
+          <th ${thStyle}>Phone</th><th ${thStyle}>Location</th><th ${thStyle}>Loan eligible</th>
+          <th ${thStyle}>Hidden</th><th ${thStyle}>Created Date</th><th ${thStyle}>Created Time</th>
+          <th ${thStyle}>Updated Date</th><th ${thStyle}>Updated Time</th>
+        </tr>
+      </thead>
+      <tbody>`;
     
     let clientIndex = 1;
     for (const c of clients) {
       const cDate = c.createdAt ? new Date(c.createdAt) : null;
       const uDate = c.updatedAt ? new Date(c.updatedAt) : null;
 
-      clientRows.push([
-        { v: clientIndex++, t: 'n' }, 
-        { v: c.id || '', t: 's' },
-        { v: c.name || '', t: 's' },
-        { v: c.phone || '', t: 's' },
-        { v: c.location || '', t: 's' },
-        { v: c.loanEligible ? 'Yes' : 'No', t: 's' },
-        { v: c.hidden ? 'Yes' : 'No', t: 's' },
-        { v: cDate ? getLongDate(cDate) : '', t: 's' },
-        { v: cDate ? getTimeString(cDate) : '', t: 's' },
-        { v: uDate ? getLongDate(uDate) : '', t: 's' },
-        { v: uDate ? getTimeString(uDate) : '', t: 's' }
-      ]);
+      clientsHtml += `<tr>
+        <td>${clientIndex++}</td>
+        <td>${c.id || ''}</td>
+        <td>${c.name || ''}</td>
+        <td>${c.phone || ''}</td>
+        <td>${c.location || ''}</td>
+        <td>${c.loanEligible ? 'Yes' : 'No'}</td>
+        <td>${c.hidden ? 'Yes' : 'No'}</td>
+        <td>${cDate ? getLongDate(cDate) : ''}</td>
+        <td>${cDate ? getTimeString(cDate) : ''}</td>
+        <td>${uDate ? getLongDate(uDate) : ''}</td>
+        <td>${uDate ? getTimeString(uDate) : ''}</td>
+      </tr>`;
     }
+    clientsHtml += `</tbody></table>`;
 
     // ==========================================
-    // 3. GENERATE AND CONFIGURE WORKBOOK
+    // 3. CONVERT HTML TABLES TO WORKBOOK
     // ==========================================
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(ledgerRows);
-    const wsClients = XLSX.utils.aoa_to_sheet(clientRows);
+    const container = document.createElement('div');
+    container.innerHTML = ledgerHtml + clientsHtml; // Dom parsed staging area
     
-    // --- Complete Auto-fit Column Widths Logic ---
-    // This loops through every cell to compute the maximum text length dynamically per column
-    const calculateAutoFit = (rowsArray, rawHeaders) => {
-      // Initialize layout measurements using string length of the header text
-      const maxLens = rawHeaders.map(h => String(h).length);
-      
-      for (let r = 1; r < rowsArray.length; r++) {
-        for (let c = 0; c < rowsArray[r].length; c++) {
-          const cell = rowsArray[r][c];
-          let valStr = '';
-          
-          if (cell && typeof cell === 'object') {
+    const tables = container.getElementsByTagName('table');
+    const ws = XLSX.utils.table_to_sheet(tables[0]);
+    const wsClients = XLSX.utils.table_to_sheet(tables[1]);
+
+    // --- Autofit Width Logic ---
+    const calculateAutoFit = (wsObject) => {
+      const range = XLSX.utils.decode_range(wsObject['!ref']);
+      const widths = [];
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        let maxLen = 10; // Default fallback width
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = wsObject[cellAddress];
+          if (cell && cell.v) {
+            let valStr = String(cell.v);
             if (cell.z && cell.z.includes('GH₵')) {
-              // Add padding overhead for custom currency structures like "GH₵ 15,000.00"
-              valStr = `GH₵ ${Number(cell.v).toLocaleString(undefined, { minimumFractionDigits: 2 })}` ;
-            } else {
-              valStr = String(cell.v || '');
+              valStr = `GH₵ ${Number(cell.v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
             }
-          } else {
-            valStr = String(cell || '');
-          }
-          
-          if (valStr.length > maxLens[c]) {
-            maxLens[c] = valStr.length;
+            if (valStr.length > maxLen) maxLen = valStr.length;
           }
         }
+        widths.push({ wch: C === 0 ? Math.max(maxLen + 2, 6) : maxLen + 3 });
       }
-      // Maps lengths into SheetJS configuration format (+3 characters for spacing safety)
-      return maxLens.map(len => ({ wch: Math.max(len + 3, 6) }));
+      return widths;
     };
-    
-    // Apply calculated measurements to both layout sheets
-    ws['!cols'] = calculateAutoFit(ledgerRows, ledgerHeaders);
-    wsClients['!cols'] = calculateAutoFit(clientRows, clientHeaders);
 
-    // Append sheets to workbook
+    ws['!cols'] = calculateAutoFit(ws);
+    wsClients['!cols'] = calculateAutoFit(wsClients);
+
+    const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
     XLSX.utils.book_append_sheet(wb, wsClients, 'Clients');
 
-    // Create file name and save
     const fname = `uncle-atto-ledger-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.xlsx`;
     XLSX.writeFile(wb, fname);
     
-    toast('Exported styled Excel');
+    toast('Exported beautifully styled Excel');
   } catch (err) {
     console.error('Excel export failed', err);
     toast('Excel export failed: ' + (err && err.message ? err.message : 'See console'));
