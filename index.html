@@ -1520,7 +1520,7 @@ document.getElementById('btn-export-json').addEventListener('click', async () =>
   }
 });
 
-// Export ledger as Excel (XLSX) using SheetJS
+// Export ledger as Excel (XLSX) using SheetJS (with styling support)
 document.getElementById('btn-export-excel').addEventListener('click', async () => {
   try {
     toast('Preparing Excel export...');
@@ -1543,11 +1543,23 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
       return dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     };
 
+    // Shared styling object for the table headers (Navy Blue Background, White Bold Text)
+    const headerStyle = {
+      fill: { fgColor: { rgb: "1F4E78" } }, // Deep Navy Blue
+      font: { name: "Arial", size: 11, bold: true, color: { rgb: "FFFFFF" } },
+      alignment: { horizontal: "center", vertical: "center" }
+    };
+
+    // Helper to format raw text headers into styled cell objects
+    const createStyledHeaders = (headersArray) => {
+      return headersArray.map(headerText => ({ v: headerText, t: 's', s: headerStyle }));
+    };
+
     // ==========================================
     // 1. BUILD LEDGER SHEET
     // ==========================================
     const ledgerHeaders = ['No.', 'Date', 'Time', 'Transaction ID', 'Client ID', 'Client name', 'Phone', 'Location', 'Type', 'Amount', 'Note', 'Synced'];
-    const ledgerRows = [ledgerHeaders];
+    const ledgerRows = [createStyledHeaders(ledgerHeaders)]; // Apply styling to row 0
     
     let ledgerIndex = 1;
     for (const t of txns) {
@@ -1555,16 +1567,16 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
       const tDate = new Date(t.timestamp);
       
       ledgerRows.push([
-        { v: ledgerIndex++, t: 'n' },                           // Column A: Numbering
-        { v: getLongDate(tDate), t: 's' },                      // Long Date
-        { v: getTimeString(tDate), t: 's' },                    // Separated Time
+        { v: ledgerIndex++, t: 'n' }, 
+        { v: getLongDate(tDate), t: 's' }, 
+        { v: getTimeString(tDate), t: 's' }, 
         { v: t.id || '', t: 's' },
         { v: t.clientId || '', t: 's' },
         { v: c.name || '', t: 's' },
         { v: c.phone || '', t: 's' },
         { v: c.location || '', t: 's' },
         { v: t.type || '', t: 's' },
-        { v: Number(t.amount) || 0, t: 'n', z: '"GH₵ "#,##0.00' }, // Ghana Cedis Currency Format
+        { v: Number(t.amount) || 0, t: 'n', z: '"GH₵ "#,##0.00' }, // Ghana Cedis
         { v: t.note || '', t: 's' },
         { v: t.synced ? 'Yes' : 'No', t: 's' }
       ]);
@@ -1574,7 +1586,7 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
     // 2. BUILD CLIENTS SHEET
     // ==========================================
     const clientHeaders = ['No.', 'Client ID', 'Name', 'Phone', 'Location', 'Loan eligible', 'Hidden', 'Created Date', 'Created Time', 'Updated Date', 'Updated Time'];
-    const clientRows = [clientHeaders];
+    const clientRows = [createStyledHeaders(clientHeaders)]; // Apply styling to row 0
     
     let clientIndex = 1;
     for (const c of clients) {
@@ -1582,7 +1594,7 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
       const uDate = c.updatedAt ? new Date(c.updatedAt) : null;
 
       clientRows.push([
-        { v: clientIndex++, t: 'n' },                           // Column A: Numbering
+        { v: clientIndex++, t: 'n' }, 
         { v: c.id || '', t: 's' },
         { v: c.name || '', t: 's' },
         { v: c.phone || '', t: 's' },
@@ -1600,27 +1612,53 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
     // 3. GENERATE AND CONFIGURE WORKBOOK
     // ==========================================
     const wb = XLSX.utils.book_new();
-    
-    // Convert arrays into actual sheet objects
     const ws = XLSX.utils.aoa_to_sheet(ledgerRows);
     const wsClients = XLSX.utils.aoa_to_sheet(clientRows);
     
-    // Apply a fixed structural width of 25 characters to all active columns
-    const fixedWidthsLedger = ledgerHeaders.map(() => ({ wch: 25 }));
-    const fixedWidthsClients = clientHeaders.map(() => ({ wch: 25 }));
+    // --- Complete Auto-fit Column Widths Logic ---
+    // This loops through every cell to compute the maximum text length dynamically per column
+    const calculateAutoFit = (rowsArray, rawHeaders) => {
+      // Initialize layout measurements using string length of the header text
+      const maxLens = rawHeaders.map(h => String(h).length);
+      
+      for (let r = 1; r < rowsArray.length; r++) {
+        for (let c = 0; c < rowsArray[r].length; c++) {
+          const cell = rowsArray[r][c];
+          let valStr = '';
+          
+          if (cell && typeof cell === 'object') {
+            if (cell.z && cell.z.includes('GH₵')) {
+              // Add padding overhead for custom currency structures like "GH₵ 15,000.00"
+              valStr = `GH₵ ${Number(cell.v).toLocaleString(undefined, { minimumFractionDigits: 2 })}` ;
+            } else {
+              valStr = String(cell.v || '');
+            }
+          } else {
+            valStr = String(cell || '');
+          }
+          
+          if (valStr.length > maxLens[c]) {
+            maxLens[c] = valStr.length;
+          }
+        }
+      }
+      // Maps lengths into SheetJS configuration format (+3 characters for spacing safety)
+      return maxLens.map(len => ({ wch: Math.max(len + 3, 6) }));
+    };
     
-    ws['!cols'] = fixedWidthsLedger;
-    wsClients['!cols'] = fixedWidthsClients;
+    // Apply calculated measurements to both layout sheets
+    ws['!cols'] = calculateAutoFit(ledgerRows, ledgerHeaders);
+    wsClients['!cols'] = calculateAutoFit(clientRows, clientHeaders);
 
     // Append sheets to workbook
     XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
     XLSX.utils.book_append_sheet(wb, wsClients, 'Clients');
 
-    // Create file name and trigger local browser download
+    // Create file name and save
     const fname = `uncle-atto-ledger-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.xlsx`;
     XLSX.writeFile(wb, fname);
     
-    toast('Exported Excel with custom formats');
+    toast('Exported styled Excel');
   } catch (err) {
     console.error('Excel export failed', err);
     toast('Excel export failed: ' + (err && err.message ? err.message : 'See console'));
