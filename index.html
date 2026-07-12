@@ -25,6 +25,9 @@
 <!-- html2pdf.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
+<!-- SheetJS (XLSX) for Excel exports -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
 <!-- ================= Cloud sync (Supabase) =================
      This SDK powers real, live, multi-device sync: changes made on one phone
      appear on every other device signed into the same project within a second
@@ -382,7 +385,9 @@
         <div class="flex flex-wrap gap-2 pt-1">
           <button id="btn-clear-filters" class="tap flex-1 min-w-[120px] text-sm rounded-xl border border-ink-100 dark:border-ink-700">Reset</button>
           <button id="btn-preview-pdf" class="tap flex-1 min-w-[120px] text-sm rounded-xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 font-medium">Preview statement</button>
-          <button id="btn-export-pdf" class="tap flex-1 min-w-[120px] text-sm rounded-xl bg-ledger-500 text-white font-medium">Export statement PDF</button>
+          <button id="btn-export-pdf" class="tap min-w-[120px] text-sm rounded-xl bg-ledger-500 text-white font-medium">Export statement PDF</button>
+          <button id="btn-export-json" class="tap min-w-[120px] text-sm rounded-xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 font-medium">Export JSON</button>
+          <button id="btn-export-excel" class="tap min-w-[120px] text-sm rounded-xl bg-ledger-500 text-white font-medium">Export Excel (XLSX)</button>
         </div>
       </div>
 
@@ -1464,6 +1469,93 @@ document.getElementById('btn-preview-pdf').addEventListener('click', async () =>
   body.appendChild(report);
   document.getElementById('modal-export-preview').classList.remove('hidden');
   previewReportElement = report;
+});
+
+// Export ledger as JSON (includes client details and photos as data URLs)
+document.getElementById('btn-export-json').addEventListener('click', async () => {
+  const { txns } = await getFilteredTransactions();
+  const clients = await db.clients.toArray();
+  const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
+  const records = txns.map(t => {
+    const c = clientDetails[t.clientId] || {};
+    return {
+      transactionId: t.id,
+      timestamp: t.timestamp,
+      date: new Date(t.timestamp).toISOString(),
+      type: t.type,
+      amount: t.amount,
+      note: t.note || '',
+      synced: !!t.synced,
+      updatedAt: t.updatedAt || t.timestamp,
+      client: {
+        id: t.clientId,
+        name: c.name || '',
+        phone: c.phone || '',
+        location: c.location || '',
+        photo: c.photo || null,
+        loanEligible: !!c.loanEligible,
+        hidden: !!c.hidden,
+        createdAt: c.createdAt || null,
+        updatedAt: c.updatedAt || null,
+      }
+    };
+  });
+  const payload = { generatedAt: new Date().toISOString(), total: records.length, records };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `uncle-atto-ledger-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast('Exported JSON');
+});
+
+// Export ledger as Excel (XLSX) using SheetJS
+document.getElementById('btn-export-excel').addEventListener('click', async () => {
+  if (typeof XLSX === 'undefined') { toast('Excel export library not loaded'); return; }
+  const { txns } = await getFilteredTransactions();
+  const clients = await db.clients.toArray();
+  const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
+
+  // Build rows for the main sheet
+  const headers = ['Date', 'Transaction ID', 'Client ID', 'Client name', 'Phone', 'Location', 'Type', 'Amount', 'Note', 'Synced', 'Client photo (data URL)'];
+  const rows = [headers];
+  for (const t of txns) {
+    const c = clientDetails[t.clientId] || {};
+    rows.push([
+      new Date(t.timestamp).toLocaleString('en-GB'),
+      t.id,
+      t.clientId,
+      c.name || '',
+      c.phone || '',
+      c.location || '',
+      t.type,
+      t.amount,
+      t.note || '',
+      !!t.synced,
+      c.photo || ''
+    ]);
+  }
+
+  // Also add a Clients sheet with full client data
+  const clientHeaders = ['Client ID','Name','Phone','Location','Loan eligible','Hidden','Created at','Updated at','Photo (data URL)'];
+  const clientRows = [clientHeaders];
+  for (const c of clients) {
+    clientRows.push([c.id, c.name, c.phone || '', c.location || '', !!c.loanEligible, !!c.hidden, c.createdAt || '', c.updatedAt || '', c.photo || '']);
+  }
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wsClients = XLSX.utils.aoa_to_sheet(clientRows);
+  XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
+  XLSX.utils.book_append_sheet(wb, wsClients, 'Clients');
+
+  const fname = `uncle-atto-ledger-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.xlsx`;
+  XLSX.writeFile(wb, fname);
+  toast('Exported Excel');
 });
 
 document.getElementById('btn-export-pdf').addEventListener('click', async () => {
