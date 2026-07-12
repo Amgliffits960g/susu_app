@@ -1566,8 +1566,8 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
   for (const c of clients) {
     let clientPhotoVal = '';
     if (c.photo) {
-      if (typeof c.photo === 'string' && c.photo.length > 30000) {
-        clientPhotoVal = c.photo.slice(0,30000) + '... (truncated)';
+      if (typeof c.photo === 'string' && c.photo.length > 30) {
+        clientPhotoVal = c.photo.slice(0,30) + '... (truncated)';
         truncatedPhotos = true;
       } else {
         clientPhotoVal = c.photo;
