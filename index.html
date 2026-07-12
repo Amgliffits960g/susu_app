@@ -1520,12 +1520,12 @@ document.getElementById('btn-export-json').addEventListener('click', async () =>
   }
 });
 
-// Export ledger as Excel (XLSX) using SheetJS with HTML-based styling
+// Export ledger as Excel (XLSX) using ExcelJS
 document.getElementById('btn-export-excel').addEventListener('click', async () => {
   try {
     toast('Preparing Excel export...');
-    if (typeof XLSX === 'undefined') { 
-      toast('Excel export library not loaded'); 
+    if (typeof ExcelJS === 'undefined') { 
+      toast('ExcelJS library not loaded. Please include exceljs.min.js script.'); 
       return; 
     }
     
@@ -1533,127 +1533,257 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
     const clients = await db.clients.toArray();
     const clientDetails = Object.fromEntries(clients.map(c => [c.id, c]));
 
+    const currentFormattedDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     const getLongDate = (dateObj) => dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     const getTimeString = (dateObj) => dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // Stylesheet rules that SheetJS reads successfully during conversion
-    const thStyle = 'style="background-color: #1F4E78; color: #FFFFFF; font-weight: bold; font-family: Arial; text-align: center;"';
+    // Helper to normalize +233 / 233 numbers to natural local Ghanaian formatting (0...)
+    const formatGhanaPhone = (phoneStr) => {
+      if (!phoneStr) return '';
+      let clean = phoneStr.trim().replace(/\s+/g, '').replace('+', '');
+      if (clean.startsWith('233')) {
+        return '0' + clean.slice(3);
+      }
+      return phoneStr; // Fallback to raw value if it doesn't match international prefix patterns
+    };
+
+    // Create Workbook
+    const workbook = new ExcelJS.Workbook();
+    
+    // Shared Global Styling Templates
+    const navyHeaderFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } }; 
+    const whiteBoldFont = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+    const graySectionFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAEAEA' } }; 
+    const centerAlignment = { horizontal: 'center', vertical: 'middle' };
+    const rightAlignment = { horizontal: 'right', vertical: 'middle' };
+    const leftAlignment = { horizontal: 'left', vertical: 'middle' };
 
     // ==========================================
-    // 1. GENERATE LEDGER HTML TABLE
+    // SHEET 1: DASHBOARD / COVER PAGE
     // ==========================================
-    let ledgerHtml = `<table>
-      <thead>
-        <tr>
-          <th ${thStyle}>No.</th><th ${thStyle}>Date</th><th ${thStyle}>Time</th>
-          <th ${thStyle}>Transaction ID</th><th ${thStyle}>Client ID</th><th ${thStyle}>Client name</th>
-          <th ${thStyle}>Phone</th><th ${thStyle}>Location</th><th ${thStyle}>Type</th>
-          <th ${thStyle}>Amount</th><th ${thStyle}>Note</th><th ${thStyle}>Synced</th>
-        </tr>
-      </thead>
-      <tbody>`;
+    const wsCover = workbook.addWorksheet('Overview');
+    wsCover.columns = [{ width: 25 }, { width: 45 }];
+    wsCover.views = [{ showGridLines: false }]; // Modern dashboard layout without plain canvas gridlines
+
+    wsCover.mergeCells('A1:B1');
+    const coverTitle = wsCover.getCell('A1');
+    coverTitle.value = "UNCLE ATTO LEDGER MANAGEMENT SYSTEM";
+    coverTitle.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+    coverTitle.fill = navyHeaderFill;
+    coverTitle.alignment = centerAlignment;
+    wsCover.getRow(1).height = 40;
+
+    wsCover.addRow([]);
+    wsCover.addRow(['Report Metric Type:', 'Comprehensive Financial Statement & Client Registry']);
+    wsCover.addRow(['Generation Scope:', `All real-time active historical data up to ${currentFormattedDate}`]);
+    wsCover.addRow(['Primary Currency:', 'Ghana Cedis (GHS / GH₵)']);
+    wsCover.addRow(['Data Source Integrity:', 'IndexedDB Local Cloud Storage (Verified Engine)']);
+    wsCover.addRow(['File Extraction Timestamp:', `${currentFormattedDate} at ${getTimeString(new Date())}`]);
     
+    // Style cover items cleanly
+    for (let i = 3; i <= 8; i++) {
+      wsCover.getCell(`A${i}`).font = { bold: true, name: 'Arial' };
+      wsCover.getCell(`A${i}`).fill = graySectionFill;
+      wsCover.getCell(`B${i}`).font = { name: 'Arial', italic: i === 7 };
+    }
+
+    // ==========================================
+    // SHEET 2: SUMMARY BALANCE SHEET
+    // ==========================================
+    let totalSavings = 0;
+    let totalWithdrawals = 0;
+    let otherIncome = 0;
+
+    for (const t of txns) {
+      const amt = Number(t.amount) || 0;
+      const typeLower = (t.type || '').toLowerCase();
+      if (typeLower.includes('saving')) totalSavings += amt;
+      else if (typeLower.includes('withdraw')) totalWithdrawals += amt;
+      else otherIncome += amt;
+    }
+    const netBalance = (totalSavings + otherIncome) - totalWithdrawals;
+
+    const wsSummary = workbook.addWorksheet('Balance Sheet');
+    wsSummary.columns = [{ width: 30 }, { width: 25 }];
+    
+    wsSummary.mergeCells('A1:B1');
+    const summaryTitle = wsSummary.getCell('A1');
+    summaryTitle.value = `FINANCIAL ACCUMULATION STATEMENT (As of ${currentFormattedDate})`;
+    summaryTitle.font = whiteBoldFont;
+    summaryTitle.fill = navyHeaderFill;
+    summaryTitle.alignment = centerAlignment;
+    wsSummary.getRow(1).height = 30;
+
+    wsSummary.addRow(['Total Accumulated Savings', totalSavings]);
+    wsSummary.addRow(['Total Other Inflow/Loans Issued', otherIncome]);
+    wsSummary.addRow(['Total Withdrawals/Payouts', totalWithdrawals]);
+    wsSummary.addRow([]);
+    
+    const finalBalanceRow = wsSummary.addRow(['Net Vault Cash (Balance)', netBalance]);
+    
+    ['B2', 'B3', 'B4', 'B6'].forEach(cellRef => {
+      const cell = wsSummary.getCell(cellRef);
+      cell.numFmt = '"GH₵ "#,##0.00';
+      cell.alignment = rightAlignment;
+    });
+
+    finalBalanceRow.getCell(1).font = { bold: true };
+    finalBalanceRow.getCell(1).fill = graySectionFill;
+    finalBalanceRow.getCell(2).font = { bold: true, color: { argb: netBalance >= 0 ? 'FF006100' : 'FF9C0006' } };
+    finalBalanceRow.getCell(2).fill = graySectionFill;
+
+    // ==========================================
+    // SHEET 3: TRANSACTION LEDGER
+    // ==========================================
+    const wsLedger = workbook.addWorksheet('Ledger');
+    wsLedger.columns = [
+      { header: 'No.', key: 'no' },
+      { header: 'Date', key: 'date' },
+      { header: 'Time', key: 'time' },
+      { header: 'Transaction ID', key: 'txId' },
+      { header: 'Client ID', key: 'clientId' },
+      { header: 'Client name', key: 'clientName' },
+      { header: 'Phone', key: 'phone' },
+      { header: 'Location', key: 'location' },
+      { header: 'Type', key: 'type' },
+      { header: 'Amount', key: 'amount' },
+      { header: 'Note', key: 'note' },
+      { header: 'Synced', key: 'synced' }
+    ];
+
     let ledgerIndex = 1;
     for (const t of txns) {
       const c = clientDetails[t.clientId] || {};
       const tDate = new Date(t.timestamp);
-      const amt = Number(t.amount) || 0;
-
-      ledgerHtml += `<tr>
-        <td>${ledgerIndex++}</td>
-        <td>${getLongDate(tDate)}</td>
-        <td>${getTimeString(tDate)}</td>
-        <td>${t.id || ''}</td>
-        <td>${t.clientId || ''}</td>
-        <td>${c.name || ''}</td>
-        <td>${c.phone || ''}</td>
-        <td>${c.location || ''}</td>
-        <td>${t.type || ''}</td>
-        <td data-t="n" data-z='"GH₵ "#,##0.00'>${amt}</td>
-        <td>${t.note || ''}</td>
-        <td>${t.synced ? 'Yes' : 'No'}</td>
-      </tr>`;
+      wsLedger.addRow({
+        no: ledgerIndex++,
+        date: getLongDate(tDate),
+        time: getTimeString(tDate),
+        txId: t.id || '',
+        clientId: t.clientId || '',
+        clientName: c.name || '',
+        phone: formatGhanaPhone(c.phone), // Normalized formatting
+        location: c.location || '',
+        type: t.type || '',
+        amount: Number(t.amount) || 0,
+        note: t.note || '',
+        synced: t.synced ? 'Yes' : 'No'
+      });
     }
-    ledgerHtml += `</tbody></table>`;
+    wsLedger.getColumn('amount').numFmt = '"GH₵ "#,##0.00';
 
     // ==========================================
-    // 2. GENERATE CLIENTS HTML TABLE
+    // SHEET 4: CLIENTS REGISTRY
     // ==========================================
-    let clientsHtml = `<table>
-      <thead>
-        <tr>
-          <th ${thStyle}>No.</th><th ${thStyle}>Client ID</th><th ${thStyle}>Name</th>
-          <th ${thStyle}>Phone</th><th ${thStyle}>Location</th><th ${thStyle}>Loan eligible</th>
-          <th ${thStyle}>Hidden</th><th ${thStyle}>Created Date</th><th ${thStyle}>Created Time</th>
-          <th ${thStyle}>Updated Date</th><th ${thStyle}>Updated Time</th>
-        </tr>
-      </thead>
-      <tbody>`;
-    
+    const wsClients = workbook.addWorksheet('Clients');
+    wsClients.columns = [
+      { header: 'No.', key: 'no' },
+      { header: 'Client ID', key: 'clientId' },
+      { header: 'Name', key: 'name' },
+      { header: 'Phone', key: 'phone' },
+      { header: 'Location', key: 'location' },
+      { header: 'Loan eligible', key: 'eligible' },
+      { header: 'Hidden', key: 'hidden' },
+      { header: 'Created Date', key: 'cDate' },
+      { header: 'Created Time', key: 'cTime' },
+      { header: 'Updated Date', key: 'uDate' },
+      { header: 'Updated Time', key: 'uTime' }
+    ];
+
     let clientIndex = 1;
     for (const c of clients) {
       const cDate = c.createdAt ? new Date(c.createdAt) : null;
       const uDate = c.updatedAt ? new Date(c.updatedAt) : null;
-
-      clientsHtml += `<tr>
-        <td>${clientIndex++}</td>
-        <td>${c.id || ''}</td>
-        <td>${c.name || ''}</td>
-        <td>${c.phone || ''}</td>
-        <td>${c.location || ''}</td>
-        <td>${c.loanEligible ? 'Yes' : 'No'}</td>
-        <td>${c.hidden ? 'Yes' : 'No'}</td>
-        <td>${cDate ? getLongDate(cDate) : ''}</td>
-        <td>${cDate ? getTimeString(cDate) : ''}</td>
-        <td>${uDate ? getLongDate(uDate) : ''}</td>
-        <td>${uDate ? getTimeString(uDate) : ''}</td>
-      </tr>`;
+      wsClients.addRow({
+        no: clientIndex++,
+        clientId: c.id || '',
+        name: c.name || '',
+        phone: formatGhanaPhone(c.phone), // Normalized formatting
+        location: c.location || '',
+        eligible: c.loanEligible ? 'Yes' : 'No',
+        hidden: c.hidden ? 'Yes' : 'No',
+        cDate: cDate ? getLongDate(cDate) : '',
+        cTime: cDate ? getTimeString(cDate) : '',
+        uDate: uDate ? getLongDate(uDate) : '',
+        uTime: uDate ? getTimeString(uDate) : ''
+      });
     }
-    clientsHtml += `</tbody></table>`;
 
     // ==========================================
-    // 3. CONVERT HTML TABLES TO WORKBOOK
+    // SHEET 5: ANALYTICS & METRICS DISTRIBUTION
     // ==========================================
-    const container = document.createElement('div');
-    container.innerHTML = ledgerHtml + clientsHtml; // Dom parsed staging area
-    
-    const tables = container.getElementsByTagName('table');
-    const ws = XLSX.utils.table_to_sheet(tables[0]);
-    const wsClients = XLSX.utils.table_to_sheet(tables[1]);
+    const wsAnalytics = workbook.addWorksheet('Visual Analytics');
+    wsAnalytics.columns = [{ width: 35 }, { width: 25 }, { width: 30 }];
+    wsAnalytics.views = [{ showGridLines: false }];
 
-    // --- Autofit Width Logic ---
-    const calculateAutoFit = (wsObject) => {
-      const range = XLSX.utils.decode_range(wsObject['!ref']);
-      const widths = [];
-      for (let C = range.s.c; C <= range.e.c; ++C) {
-        let maxLen = 10; // Default fallback width
-        for (let R = range.s.r; R <= range.e.r; ++R) {
-          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-          const cell = wsObject[cellAddress];
-          if (cell && cell.v) {
-            let valStr = String(cell.v);
-            if (cell.z && cell.z.includes('GH₵')) {
-              valStr = `GH₵ ${Number(cell.v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-            }
-            if (valStr.length > maxLen) maxLen = valStr.length;
+    wsAnalytics.mergeCells('A1:C1');
+    const analyticsTitle = wsAnalytics.getCell('A1');
+    analyticsTitle.value = "VISUAL RATIO & DATA KPI DASHBOARD";
+    analyticsTitle.font = whiteBoldFont;
+    analyticsTitle.fill = navyHeaderFill;
+    analyticsTitle.alignment = centerAlignment;
+    wsAnalytics.getRow(1).height = 30;
+
+    wsAnalytics.addRow([]);
+    wsAnalytics.addRow(['Metric Breakdown Indicator', 'Value Projection', 'Visual Weight Flag']);
+
+    // Savings vs Withdrawals analytics ratios
+    const totalVolume = totalSavings + totalWithdrawals || 1;
+    const savingsPct = (totalSavings / totalVolume);
+    const withdrawalPct = (totalWithdrawals / totalVolume);
+
+    wsAnalytics.addRow(['Savings Contribution Share', savingsPct, savingsPct >= 0.5 ? '⭐ High Capital Inflow' : 'Check Ratios']);
+    wsAnalytics.addRow(['Withdrawal Exposure Ratio', withdrawalPct, withdrawalPct > 0.4 ? '⚠️ High Outflow Alert' : 'Healthy Retention']);
+    wsAnalytics.addRow(['Active Client Records Enrolled', clients.length, 'Total Base Count']);
+    wsAnalytics.addRow(['Total Logged Event Operations', txns.length, 'Activity Depth']);
+
+    // Style Analytics distribution view cells
+    wsAnalytics.getRow(3).font = { bold: true };
+    wsAnalytics.getRow(3).eachCell(c => c.fill = graySectionFill);
+    wsAnalytics.getCell('B4').numFmt = '0.0%';
+    wsAnalytics.getCell('B5').numFmt = '0.0%';
+
+    // Apply soft conditional visual feedback directly inside the cell grid patterns
+    wsAnalytics.getCell('C4').font = { color: { argb: 'FF006100' }, bold: true };
+    wsAnalytics.getCell('C5').font = { color: { argb: withdrawalPct > 0.4 ? 'FF9C0006' : 'FF006100' }, bold: true };
+
+    // ==========================================
+    // 6. STYLE HEADERS & AUTO-FIT (DATA SHEETS)
+    // ==========================================
+    [wsLedger, wsClients].forEach(ws => {
+      const headerRow = ws.getRow(1);
+      headerRow.height = 24;
+      headerRow.eachCell(cell => {
+        cell.fill = navyHeaderFill;
+        cell.font = whiteBoldFont;
+        cell.alignment = centerAlignment;
+      });
+
+      ws.columns.forEach((column, index) => {
+        let maxLen = column.header ? column.header.length : 10;
+        column.eachCell({ includeHeader: false }, cell => {
+          let valStr = String(cell.value || '');
+          if (column.key === 'amount') {
+            valStr = `GH₵ ${Number(cell.value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
           }
-        }
-        widths.push({ wch: C === 0 ? Math.max(maxLen + 2, 6) : maxLen + 3 });
-      }
-      return widths;
-    };
+          if (valStr.length > maxLen) maxLen = valStr.length;
+        });
+        column.width = index === 0 ? Math.max(maxLen + 2, 6) : maxLen + 4;
+      });
+    });
 
-    ws['!cols'] = calculateAutoFit(ws);
-    wsClients['!cols'] = calculateAutoFit(wsClients);
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
-    XLSX.utils.book_append_sheet(wb, wsClients, 'Clients');
-
+    // Save File Out via Browser Native Blob Stream
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const fname = `uncle-atto-ledger-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.xlsx`;
-    XLSX.writeFile(wb, fname);
     
-    toast('Exported beautifully styled Excel');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = fname;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    
+    toast('Exported Comprehensive Statement Workbook');
   } catch (err) {
     console.error('Excel export failed', err);
     toast('Excel export failed: ' + (err && err.message ? err.message : 'See console'));
