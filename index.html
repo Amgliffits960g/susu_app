@@ -2688,6 +2688,60 @@ async function refreshCurrentView() {
   window.addEventListener('beforeunload', () => {
     sessionStorage.removeItem('ledgerAppAuth');
   });
+
+// 1. Disable Right-Click menu
+document.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+});
+
+// 2. Disable Zoom & Security Keyboard Shortcuts
+document.addEventListener('keydown', (event) => {
+    // Disable F12 (Inspect Element)
+    if (event.key === 'F12') {
+        event.preventDefault();
+        return false;
+    }
+
+    // Disable Ctrl+U (View Source) and Ctrl+Shift+I (Inspect)
+    if (event.ctrlKey && (event.key === 'u' || event.key === 'U' || (event.shiftKey && (event.key === 'i' || event.key === 'I')))) {
+        event.preventDefault();
+        return false;
+    }
+
+    // --- NEW: Disable Keyboard Zoom (Ctrl + Plus, Ctrl + Minus, Ctrl + Zero) ---
+    if (event.ctrlKey && (event.key === '+' || event.key === '=' || event.key === '-' || event.key === '0')) {
+        event.preventDefault();
+        return false;
+    }
+});
+
+// 3. --- NEW: Disable Mouse Wheel Zoom (Ctrl + Mouse Scroll) ---
+document.addEventListener('wheel', (event) => {
+    if (event.ctrlKey) {
+        event.preventDefault();
+    }
+}, { passive: false });
+
+
+// 1. Disable Right-Click menu
+document.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+});
+
+// 2. Disable Ctrl+U, F12, and Inspect Element shortcuts
+document.addEventListener('keydown', (event) => {
+    // Disable F12
+    if (event.key === 'F12') {
+        event.preventDefault();
+        return false;
+    }
+
+    // Disable Ctrl+U (View Source) and Ctrl+Shift+I (Inspect)
+    if (event.ctrlKey && (event.key === 'u' || event.key === 'U' || (event.shiftKey && (event.key === 'i' || event.key === 'I')))) {
+        event.preventDefault();
+        return false;
+    }
+});
 </script>
 </body>
 </html>
