@@ -1,3 +1,4 @@
+
 <!-- This app is created by Amponsah Gliffits - 0599888073/0209562230 for more info -->
 <!DOCTYPE html>
 <html lang="en">
@@ -310,6 +311,10 @@
           <h2 class="font-display font-semibold text-base">Clients</h2>
           <button id="btn-add-client" class="text-sm text-ledger-500 font-medium">+ Add client</button>
         </div>
+        <div class="flex items-center gap-2 mb-3">
+          <input id="client-search" type="text" placeholder="Search clients by name, phone, or location" class="tap flex-1 text-sm rounded-xl px-3 bg-ink-50 dark:bg-ink-700 border border-ink-100 dark:border-ink-700">
+          <button id="btn-sort-clients" class="tap rounded-xl border border-ink-100 dark:border-ink-700 px-3 text-sm font-medium whitespace-nowrap">A→Z</button>
+        </div>
         <div id="client-list" class="space-y-2"></div>
       </div>
     </section>
@@ -317,7 +322,7 @@
     <!-- ---------- CLIENT PROFILE ---------- -->
     <section id="view-client" class="view px-4 pt-4 space-y-4">
       <div class="flex items-center justify-between">
-        <button id="btn-back-client" class="text-sm text-ledger-500 font-medium">&larr; Back</button>
+        <button id="btn-back-client" class="text-sm text-ledger-500 font-medium">&larr; Done (back to clients)</button>
         <button id="btn-edit-client" class="text-sm text-ledger-500 font-medium">Edit profile</button>
       </div>
       <div id="client-profile-header" class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4"></div>
@@ -331,6 +336,9 @@
           <p id="client-loan-total" class="font-mono-num text-lg font-semibold mt-1">GH₵0.00</p>
         </div>
       </div>
+      <button id="btn-client-add-txn" class="tap w-full rounded-2xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 font-medium flex items-center justify-center gap-2">
+        <span class="text-lg leading-none">+</span> Add transaction for this client
+      </button>
       <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4 flex items-center justify-between">
         <div>
           <p class="text-sm font-medium">Loan eligibility</p>
@@ -485,6 +493,19 @@
         <select id="settings-currency" class="tap w-full text-sm rounded-xl px-3 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
           <option value="GH₵">GH₵ — Ghanaian Cedi</option>
         </select>
+      </div>
+      <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4 space-y-3">
+        <p class="text-sm font-medium">Backup &amp; restore</p>
+        <p class="text-[11px] text-ink-900/50 dark:text-paper/50">Export a JSON backup of just your client names, or a full backup including every transaction. Keep a copy somewhere safe.</p>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="btn-backup-names" class="tap rounded-xl border border-ink-100 dark:border-ink-700 text-sm font-medium">Export names only</button>
+          <button id="btn-backup-all" class="tap rounded-xl bg-ledger-500 text-white text-sm font-medium">Export everything</button>
+        </div>
+        <label for="backup-import-input" class="tap w-full rounded-xl border border-dashed border-ink-100 dark:border-ink-700 text-sm font-medium flex items-center justify-center cursor-pointer">
+          Import backup (JSON)
+        </label>
+        <input id="backup-import-input" type="file" accept="application/json" class="hidden">
+        <p class="text-[11px] text-ink-900/50 dark:text-paper/50">Importing auto-detects whether the file is a names-only backup or a full backup with transactions.</p>
       </div>
       <div class="rounded-2xl bg-alert-500/10 border border-alert-500/30 p-4">
         <p class="text-sm font-medium text-alert-500 mb-2">Danger zone</p>
@@ -703,12 +724,27 @@ let CURRENCY = localStorage.getItem('lf_currency') || 'GH₵';
 let currentClientId = null;
 let selectedTxnType = 'deposit';
 let charts = { week: null, ratio: null };
+let clientSearchTerm = '';
+let clientSortAsc = true;
 
 const uid = () => 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
 const fmtMoney = (n) => `${CURRENCY}${(Math.round((n + Number.EPSILON) * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (iso) => new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
 const daysAgo = (n) => { const x = new Date(); x.setDate(x.getDate() - n); return x; };
+const nowFileStamp = () => new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+
+function downloadJSON(payload, filename) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.dispatchEvent(new MouseEvent('click'));
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1000);
+}
 
 const TYPE_META = {
   deposit:    { label: 'Savings deposit',    sign: 1,  cls: 'text-savings-600 dark:text-savings-500', bg: 'bg-savings-500/10 border-savings-500/30', icon: '↓' },
@@ -789,7 +825,22 @@ async function renderHome() {
   document.getElementById('stat-total-savings').textContent = fmtMoney(savings);
   document.getElementById('stat-total-loans').textContent = fmtMoney(loan);
 
-  const clients = (await db.clients.toArray()).filter(c => !c.hidden);
+  let clients = (await db.clients.toArray()).filter(c => !c.hidden);
+
+  if (clientSearchTerm.trim()) {
+    const q = clientSearchTerm.trim().toLowerCase();
+    clients = clients.filter(c =>
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.phone || '').toLowerCase().includes(q) ||
+      (c.location || '').toLowerCase().includes(q)
+    );
+  }
+
+  clients.sort((a, b) => {
+    const cmp = (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true });
+    return clientSortAsc ? cmp : -cmp;
+  });
+
   const list = document.getElementById('client-list');
   list.innerHTML = '';
   for (const c of clients) {
@@ -814,9 +865,21 @@ async function renderHome() {
     list.appendChild(row);
   }
   if (clients.length === 0) {
-    list.innerHTML = `<p class="text-sm text-ink-900/50 dark:text-paper/50 text-center py-6">No clients yet — add your first client to get started.</p>`;
+    list.innerHTML = clientSearchTerm.trim()
+      ? `<p class="text-sm text-ink-900/50 dark:text-paper/50 text-center py-6">No clients match "${clientSearchTerm.trim()}".</p>`
+      : `<p class="text-sm text-ink-900/50 dark:text-paper/50 text-center py-6">No clients yet — add your first client to get started.</p>`;
   }
 }
+
+document.getElementById('client-search').addEventListener('input', (e) => {
+  clientSearchTerm = e.target.value;
+  renderHome();
+});
+document.getElementById('btn-sort-clients').addEventListener('click', () => {
+  clientSortAsc = !clientSortAsc;
+  document.getElementById('btn-sort-clients').textContent = clientSortAsc ? 'A→Z' : 'Z→A';
+  renderHome();
+});
 
 /* =========================================================================
    RENDER: CLIENT PROFILE
@@ -1071,12 +1134,27 @@ document.getElementById('btn-new-txn').addEventListener('click', async () => {
   selectedTxnType = 'deposit';
   updateTxnTypeButtons();
   document.getElementById('form-txn').reset();
+  document.getElementById('txn-client').disabled = false;
+  checkLoanEligibilityHint();
+  modalTxn.classList.remove('hidden');
+  modalTxn.classList.add('flex');
+});
+document.getElementById('btn-client-add-txn').addEventListener('click', async () => {
+  if (!currentClientId) return;
+  await populateClientFilters();
+  selectedTxnType = 'deposit';
+  updateTxnTypeButtons();
+  document.getElementById('form-txn').reset();
+  const sel = document.getElementById('txn-client');
+  sel.value = currentClientId;
+  sel.disabled = true; // opened from a client's profile — client is locked in
   checkLoanEligibilityHint();
   modalTxn.classList.remove('hidden');
   modalTxn.classList.add('flex');
 });
 document.getElementById('close-txn').addEventListener('click', () => {
   modalTxn.classList.add('hidden'); modalTxn.classList.remove('flex');
+  document.getElementById('txn-client').disabled = false;
 });
 
 document.querySelectorAll('.txn-type-btn').forEach(btn => {
@@ -1137,6 +1215,7 @@ document.getElementById('form-txn').addEventListener('submit', async (e) => {
   };
   await db.transactions.add(record);
   modalTxn.classList.add('hidden'); modalTxn.classList.remove('flex');
+  document.getElementById('txn-client').disabled = false;
   toast('Transaction saved');
   await refreshCurrentView();
   attemptSync();
@@ -2000,6 +2079,133 @@ document.getElementById('btn-export-chart').addEventListener('click', async () =
     exportChart.destroy();
     exportCanvas.remove();
   });
+});
+
+/* =========================================================================
+   BACKUP EXPORT / IMPORT (Settings)
+   Export names only, export everything, and auto-detecting import.
+========================================================================= */
+document.getElementById('btn-backup-names').addEventListener('click', async () => {
+  try {
+    const clients = await db.clients.toArray();
+    const payload = {
+      exportType: 'clients-only',
+      generatedAt: new Date().toISOString(),
+      total: clients.length,
+      clients: clients.map(c => ({
+        id: c.id, name: c.name, phone: c.phone, location: c.location || '',
+        photo: c.photo || null, loanEligible: !!c.loanEligible, hidden: !!c.hidden,
+        createdAt: c.createdAt, updatedAt: c.updatedAt,
+      })),
+    };
+    downloadJSON(payload, `uncle-atto-clients-backup-${nowFileStamp()}.json`);
+    toast('Exported client names backup');
+  } catch (err) {
+    console.error('Names backup export failed', err);
+    toast('Export failed: ' + (err && err.message ? err.message : 'See console'));
+  }
+});
+
+document.getElementById('btn-backup-all').addEventListener('click', async () => {
+  try {
+    const clients = await db.clients.toArray();
+    const transactions = await db.transactions.toArray();
+    const payload = {
+      exportType: 'full-backup',
+      generatedAt: new Date().toISOString(),
+      totalClients: clients.length,
+      totalTransactions: transactions.length,
+      clients: clients.map(c => ({
+        id: c.id, name: c.name, phone: c.phone, location: c.location || '',
+        photo: c.photo || null, loanEligible: !!c.loanEligible, hidden: !!c.hidden,
+        createdAt: c.createdAt, updatedAt: c.updatedAt,
+      })),
+      transactions: transactions.map(t => ({
+        id: t.id, clientId: t.clientId, type: t.type, amount: t.amount,
+        note: t.note || '', timestamp: t.timestamp, updatedAt: t.updatedAt,
+      })),
+    };
+    downloadJSON(payload, `uncle-atto-full-backup-${nowFileStamp()}.json`);
+    toast('Exported full backup');
+  } catch (err) {
+    console.error('Full backup export failed', err);
+    toast('Export failed: ' + (err && err.message ? err.message : 'See console'));
+  }
+});
+
+document.getElementById('backup-import-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const now = new Date().toISOString();
+    let importedClients = 0, importedTxns = 0;
+
+    async function upsertClient(c) {
+      if (!c || !c.id || !c.name) return;
+      await db.clients.put({
+        id: c.id,
+        name: c.name || '',
+        phone: c.phone || '',
+        location: c.location || '',
+        photo: c.photo || null,
+        loanEligible: !!c.loanEligible,
+        hidden: !!c.hidden,
+        createdAt: c.createdAt || now,
+        updatedAt: now,
+        synced: false,
+      });
+      importedClients++;
+    }
+    async function upsertTxn(t) {
+      if (!t || !t.id || !t.clientId || !t.type) return;
+      await db.transactions.put({
+        id: t.id,
+        clientId: t.clientId,
+        type: t.type,
+        amount: Number(t.amount) || 0,
+        note: t.note || '',
+        timestamp: t.timestamp || now,
+        updatedAt: now,
+        synced: false,
+      });
+      importedTxns++;
+    }
+
+    if (data.exportType === 'clients-only' && Array.isArray(data.clients)) {
+      for (const c of data.clients) await upsertClient(c);
+    } else if (data.exportType === 'full-backup') {
+      for (const c of (data.clients || [])) await upsertClient(c);
+      for (const t of (data.transactions || [])) await upsertTxn(t);
+    } else if (Array.isArray(data.records)) {
+      // Legacy ledger JSON export: each record embeds its own client details.
+      const seenClients = new Set();
+      for (const r of data.records) {
+        if (r.client && r.client.id && !seenClients.has(r.client.id)) {
+          seenClients.add(r.client.id);
+          await upsertClient(r.client);
+        }
+        await upsertTxn({ id: r.transactionId, clientId: r.client?.id, type: r.type, amount: r.amount, note: r.note, timestamp: r.timestamp });
+      }
+    } else if (Array.isArray(data.clients)) {
+      for (const c of data.clients) await upsertClient(c);
+    } else {
+      toast('Unrecognized backup file format');
+      e.target.value = '';
+      return;
+    }
+
+    toast(`Imported ${importedClients} client(s) and ${importedTxns} transaction(s)`);
+    await populateClientFilters();
+    await refreshCurrentView();
+    await renderSettings();
+    attemptSync();
+  } catch (err) {
+    console.error('Backup import failed', err);
+    toast('Import failed: invalid JSON file');
+  }
+  e.target.value = '';
 });
 
 /* =========================================================================
