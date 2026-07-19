@@ -2282,8 +2282,9 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
    SETTINGS
 ========================================================================= */
 async function renderSettings() {
-  document.getElementById('settings-online').textContent = navigator.onLine ? 'Online' : 'Offline';
-  document.getElementById('settings-online').className = 'text-sm font-medium ' + (navigator.onLine ? 'text-savings-500' : 'text-alert-500');
+  const looksOnline = navigator.onLine || supabaseConnected;
+  document.getElementById('settings-online').textContent = looksOnline ? 'Online' : 'Offline';
+  document.getElementById('settings-online').className = 'text-sm font-medium ' + (looksOnline ? 'text-savings-500' : 'text-alert-500');
   const pendingT = await db.transactions.filter(t => !t.synced).count();
   const pendingC = await db.clients.filter(c => !c.synced).count();
   document.getElementById('settings-pending').textContent = pendingT + pendingC;
@@ -2397,7 +2398,10 @@ document.getElementById('btn-reset-data').addEventListener('click', async () => 
 ========================================================================= */
 function setOnlineBadge() {
   const badge = document.getElementById('online-badge');
-  if (navigator.onLine) {
+  // Trust an actual successful cloud probe (supabaseConnected) over navigator.onLine,
+  // since that flag can be wrong in some mobile browsers/WebViews/PWAs.
+  const looksOnline = navigator.onLine || supabaseConnected;
+  if (looksOnline) {
     if (isCloudConfigured()) {
       if (supabaseConnected) {
         badge.textContent = '● Online — synced';
@@ -2509,15 +2513,26 @@ function subscribeRealtime() {
 
 let syncing = false;
 async function attemptSync(manual) {
-  if (!navigator.onLine || syncing) { if (manual) toast('Still offline — will sync automatically.'); return; }
+  // NOTE: we deliberately do NOT gate this on navigator.onLine. That flag is
+  // unreliable in a lot of mobile browsers, in-app WebViews, and installed PWAs —
+  // it can report false even while the device has a perfectly good connection.
+  // Instead we trust the actual network probe below (verifyCloudConnection),
+  // which really talks to Supabase, to decide whether we're reachable.
+  if (syncing) { if (manual) toast('A sync is already in progress…'); return; }
   if (!isCloudConfigured()) { if (manual) toast('Connect a cloud project in Settings to enable multi-device sync.'); return; }
   if (!supabaseClient) initCloud();
   if (!supabaseClient) { if (manual) toast('Cloud sync is not available yet.'); return; }
   const connected = await verifyCloudConnection();
   setOnlineBadge();
   if (!connected) {
-    const message = supabaseConnectionError?.message || 'Unknown error';
-    if (manual) toast(`Cloud project not reachable: ${message}`);
+    if (manual) {
+      if (!navigator.onLine) {
+        toast('Still offline — will sync automatically once connected.');
+      } else {
+        const message = supabaseConnectionError?.message || 'Unknown error';
+        toast(`Cloud project not reachable: ${message}`);
+      }
+    }
     console.error('Supabase connection error:', supabaseConnectionError);
     return;
   }
