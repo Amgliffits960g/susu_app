@@ -1,4 +1,3 @@
-
 <!-- This app is created by Amponsah Gliffits - 0599888073/0209562230 for more info -->
 <!DOCTYPE html>
 <html lang="en">
@@ -297,26 +296,70 @@
         </div>
       </div>
 
-      <div>
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="font-display font-semibold text-base">New transaction</h2>
+      <!-- ---------- DASHBOARD ANALYTICS (moved here from the old Analytics tab) ---------- -->
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="font-display font-semibold text-base">Performance analytics</h2>
+            <p class="text-xs text-ink-900/60 dark:text-paper/60">Track savings activity by person, range, and amount.</p>
+          </div>
+          <div class="flex gap-2">
+            <button id="btn-preview-chart" class="tap rounded-xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 px-3 text-sm font-medium">Preview analytics</button>
+            <button id="btn-export-chart" class="tap rounded-xl bg-ledger-500 text-white px-3 text-sm font-medium">Export chart PDF</button>
+          </div>
         </div>
-        <button id="btn-new-txn" class="tap w-full rounded-2xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 font-medium flex items-center justify-center gap-2">
-          <span class="text-lg leading-none">+</span> Record a transaction
-        </button>
-      </div>
 
-      <div>
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="font-display font-semibold text-base">Clients</h2>
-          <button id="btn-add-client" class="text-sm text-ledger-500 font-medium">+ Add client</button>
+        <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-3 space-y-2">
+          <div class="grid grid-cols-2 gap-2">
+            <select id="a-client" class="tap text-sm rounded-xl px-3 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+              <option value="">All clients</option>
+            </select>
+            <select id="a-type" class="tap text-sm rounded-xl px-3 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+              <option value="">All types</option>
+              <option value="deposit">Deposit</option>
+              <option value="withdrawal">Withdrawal</option>
+              <option value="disbursal">Disbursal</option>
+              <option value="repayment">Repayment</option>
+            </select>
+            <input id="a-from" type="date" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+            <input id="a-to" type="date" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+            <input id="a-min" type="number" placeholder="Min amount" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+            <input id="a-max" type="number" placeholder="Max amount" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
+          </div>
         </div>
-        <div class="flex items-center gap-2 mb-3">
+
+        <div id="analytics-export-area" class="space-y-4">
+          <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4">
+            <div class="flex items-center justify-between mb-3">
+              <p class="text-sm font-medium">Daily activity trend</p>
+              <span id="analytics-summary" class="text-xs text-ink-900/60 dark:text-paper/60">0 records</span>
+            </div>
+            <canvas id="chart-activity" height="200"></canvas>
+          </div>
+          <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4">
+            <p class="text-sm font-medium mb-3">Movement breakdown</p>
+            <canvas id="chart-breakdown" height="180"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- CLIENTS (list, add, search) ---------- -->
+    <section id="view-clients" class="view px-4 pt-4">
+      <div class="sticky top-16 z-20 -mx-4 px-4 pt-3 pb-3 bg-paper/95 dark:bg-ink-900/95 backdrop-blur border-b border-ink-100 dark:border-ink-700 space-y-3">
+        <h2 class="font-display font-semibold text-lg">Clients</h2>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="btn-add-client" class="tap rounded-xl border border-ledger-500 text-ledger-500 dark:text-ledger-500 text-sm font-medium">+ Add client</button>
+          <button id="btn-new-txn" class="tap rounded-xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 text-sm font-medium flex items-center justify-center gap-1">
+            <span class="text-base leading-none">+</span> Record transaction
+          </button>
+        </div>
+        <div class="flex items-center gap-2">
           <input id="client-search" type="text" placeholder="Search clients by name, phone, or location" class="tap flex-1 text-sm rounded-xl px-3 bg-ink-50 dark:bg-ink-700 border border-ink-100 dark:border-ink-700">
           <button id="btn-sort-clients" class="tap rounded-xl border border-ink-100 dark:border-ink-700 px-3 text-sm font-medium whitespace-nowrap">A→Z</button>
         </div>
-        <div id="client-list" class="space-y-2"></div>
       </div>
+      <div id="client-list" class="space-y-2 pt-3"></div>
     </section>
 
     <!-- ---------- CLIENT PROFILE ---------- -->
@@ -405,53 +448,6 @@
       </div>
     </section>
 
-    <!-- ---------- ANALYTICS ---------- -->
-    <section id="view-analytics" class="view px-4 pt-4 space-y-4">
-      <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
-        <div>
-          <h2 class="font-display font-semibold text-lg">Performance analytics</h2>
-          <p class="text-xs text-ink-900/60 dark:text-paper/60">Track savings activity by person, range, and amount.</p>
-        </div>
-        <div class="flex gap-2">
-          <button id="btn-preview-chart" class="tap rounded-xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 px-3 text-sm font-medium">Preview analytics</button>
-          <button id="btn-export-chart" class="tap rounded-xl bg-ledger-500 text-white px-3 text-sm font-medium">Export chart PDF</button>
-        </div>
-      </div>
-
-      <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-3 space-y-2">
-        <div class="grid grid-cols-2 gap-2">
-          <select id="a-client" class="tap text-sm rounded-xl px-3 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
-            <option value="">All clients</option>
-          </select>
-          <select id="a-type" class="tap text-sm rounded-xl px-3 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
-            <option value="">All types</option>
-            <option value="deposit">Deposit</option>
-            <option value="withdrawal">Withdrawal</option>
-            <option value="disbursal">Disbursal</option>
-            <option value="repayment">Repayment</option>
-          </select>
-          <input id="a-from" type="date" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
-          <input id="a-to" type="date" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
-          <input id="a-min" type="number" placeholder="Min amount" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
-          <input id="a-max" type="number" placeholder="Max amount" class="tap text-sm rounded-xl px-2 bg-white dark:bg-ink-800 border border-ink-100 dark:border-ink-700">
-        </div>
-      </div>
-
-      <div id="analytics-export-area" class="space-y-4">
-        <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4">
-          <div class="flex items-center justify-between mb-3">
-            <p class="text-sm font-medium">Daily activity trend</p>
-            <span id="analytics-summary" class="text-xs text-ink-900/60 dark:text-paper/60">0 records</span>
-          </div>
-          <canvas id="chart-activity" height="200"></canvas>
-        </div>
-        <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4">
-          <p class="text-sm font-medium mb-3">Movement breakdown</p>
-          <canvas id="chart-breakdown" height="180"></canvas>
-        </div>
-      </div>
-    </section>
-
     <!-- ---------- SETTINGS ---------- -->
     <section id="view-settings" class="view px-4 pt-4 space-y-4">
       <h2 class="font-display font-semibold text-lg">Settings</h2>
@@ -522,14 +518,14 @@
         <span class="text-[11px] font-medium">Home</span>
         <span class="nav-dot w-1 h-1 rounded-full bg-ledger-500 opacity-0"></span>
       </button>
+      <button data-view="clients" class="nav-btn tap flex-1 flex flex-col items-center justify-center gap-0.5 py-2">
+        <span class="text-xl leading-none">👥</span>
+        <span class="text-[11px] font-medium">Clients</span>
+        <span class="nav-dot w-1 h-1 rounded-full bg-ledger-500 opacity-0"></span>
+      </button>
       <button data-view="transactions" class="nav-btn tap flex-1 flex flex-col items-center justify-center gap-0.5 py-2">
         <span class="text-xl leading-none">📒</span>
         <span class="text-[11px] font-medium">Ledger</span>
-        <span class="nav-dot w-1 h-1 rounded-full bg-ledger-500 opacity-0"></span>
-      </button>
-      <button data-view="analytics" class="nav-btn tap flex-1 flex flex-col items-center justify-center gap-0.5 py-2">
-        <span class="text-xl leading-none">📊</span>
-        <span class="text-[11px] font-medium">Analytics</span>
         <span class="nav-dot w-1 h-1 rounded-full bg-ledger-500 opacity-0"></span>
       </button>
       <button data-view="settings" class="nav-btn tap flex-1 flex flex-col items-center justify-center gap-0.5 py-2">
@@ -716,6 +712,10 @@ db.version(3).stores({
   clients: 'id, name, phone, location, loanEligible, hidden, synced',
   transactions: 'id, clientId, type, timestamp, synced',
 });
+db.version(4).stores({
+  clients: 'id, name, phone, location, loanEligible, hidden, synced, clientNumber',
+  transactions: 'id, clientId, type, timestamp, synced',
+});
 
 /* =========================================================================
    STATE & HELPERS
@@ -733,6 +733,7 @@ const fmtDate = (iso) => new Date(iso).toLocaleString('en-GB', { day: '2-digit',
 const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
 const daysAgo = (n) => { const x = new Date(); x.setDate(x.getDate() - n); return x; };
 const nowFileStamp = () => new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+const clientTag = (c) => c && c.clientNumber ? `UA_${c.clientNumber}` : 'UA_—';
 
 function downloadJSON(payload, filename) {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -766,6 +767,40 @@ function toast(msg) {
    The app is fully live from first load; every client and transaction
    shown is one a real agent entered.
 ========================================================================= */
+
+/* =========================================================================
+   CLIENT NUMBERING (UA_#) — assigned once at creation, based on the order
+   a client was added to the app. Never re-numbered by sorting or searching.
+========================================================================= */
+async function getNextClientNumber() {
+  const all = await db.clients.toArray();
+  let max = 0;
+  for (const c of all) if (c.clientNumber && c.clientNumber > max) max = c.clientNumber;
+  return max + 1;
+}
+async function backfillClientNumbers() {
+  // Any client created before this feature existed won't have a clientNumber yet.
+  // Assign numbers in the order they were created so history stays accurate.
+  const clients = (await db.clients.toArray()).sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+  let max = 0;
+  for (const c of clients) if (c.clientNumber && c.clientNumber > max) max = c.clientNumber;
+  let next = max;
+  for (const c of clients) {
+    if (!c.clientNumber) {
+      next += 1;
+      await db.clients.update(c.id, { clientNumber: next });
+    }
+  }
+}
+
+/* =========================================================================
+   SEARCH CLEAR HELPER (Clients tab)
+========================================================================= */
+function clearClientSearch() {
+  clientSearchTerm = '';
+  const input = document.getElementById('client-search');
+  if (input) input.value = '';
+}
 
 /* =========================================================================
    COMPUTATION
@@ -813,7 +848,7 @@ async function computeGlobalTotals() {
 }
 
 /* =========================================================================
-   RENDER: HOME
+   RENDER: HOME (dashboard stats — client list lives in the Clients tab)
 ========================================================================= */
 async function renderHome() {
   const { savings, loan, buckets } = await computeGlobalTotals();
@@ -824,7 +859,12 @@ async function renderHome() {
   document.getElementById('stat-year').textContent = fmtMoney(buckets.year);
   document.getElementById('stat-total-savings').textContent = fmtMoney(savings);
   document.getElementById('stat-total-loans').textContent = fmtMoney(loan);
+}
 
+/* =========================================================================
+   RENDER: CLIENTS (list, search, sort — the Clients tab)
+========================================================================= */
+async function renderClients() {
   let clients = (await db.clients.toArray()).filter(c => !c.hidden);
 
   if (clientSearchTerm.trim()) {
@@ -855,13 +895,13 @@ async function renderHome() {
       ${avatar}
       <div class="flex-1 min-w-0">
         <p class="font-medium text-sm truncate">${c.name}</p>
-        <p class="text-[11px] text-ink-900/50 dark:text-paper/50">${c.loanEligible ? 'Loan eligible' : 'Savings only'}</p>
+        <p class="text-[11px] text-ink-900/50 dark:text-paper/50">${clientTag(c)} · ${c.loanEligible ? 'Loan eligible' : 'Savings only'}</p>
       </div>
       <div class="text-right shrink-0">
         <p class="font-mono-num text-xs text-savings-600 dark:text-savings-500">${fmtMoney(bal.savings)}</p>
         <p class="font-mono-num text-xs text-loan-600 dark:text-loan-500">${fmtMoney(bal.loan)}</p>
       </div>`;
-    row.addEventListener('click', () => openClient(c.id));
+    row.addEventListener('click', () => { clearClientSearch(); openClient(c.id); });
     list.appendChild(row);
   }
   if (clients.length === 0) {
@@ -873,12 +913,12 @@ async function renderHome() {
 
 document.getElementById('client-search').addEventListener('input', (e) => {
   clientSearchTerm = e.target.value;
-  renderHome();
+  renderClients();
 });
 document.getElementById('btn-sort-clients').addEventListener('click', () => {
   clientSortAsc = !clientSortAsc;
   document.getElementById('btn-sort-clients').textContent = clientSortAsc ? 'A→Z' : 'Z→A';
-  renderHome();
+  renderClients();
 });
 
 /* =========================================================================
@@ -897,7 +937,7 @@ async function openClient(clientId) {
     <div class="flex items-center gap-3">
       ${profileAvatar}
       <div>
-        <p class="font-display font-semibold text-base">${c.name}</p>
+        <p class="font-display font-semibold text-base">${c.name} <span class="text-xs font-normal text-ink-900/40 dark:text-paper/40 font-mono-num">${clientTag(c)}</span></p>
         <p class="text-xs text-ink-900/60 dark:text-paper/60 font-mono-num">+${c.phone}</p>
         ${c.location ? `<p class="text-[11px] text-ink-900/40 dark:text-paper/40">${c.location}</p>` : ''}
         <p class="text-[11px] text-ink-900/40 dark:text-paper/40 mt-0.5">Client since ${fmtDate(c.createdAt)}</p>
@@ -1116,8 +1156,8 @@ function showView(name) {
   window.scrollTo(0,0);
 
   if (name === 'transactions') renderLedger();
-  if (name === 'analytics') renderCharts();
-  if (name === 'home') renderHome();
+  if (name === 'home') { renderHome(); renderCharts(); }
+  if (name === 'clients') renderClients();
   if (name === 'settings') renderSettings();
 }
 
@@ -1216,6 +1256,7 @@ document.getElementById('form-txn').addEventListener('submit', async (e) => {
   await db.transactions.add(record);
   modalTxn.classList.add('hidden'); modalTxn.classList.remove('flex');
   document.getElementById('txn-client').disabled = false;
+  clearClientSearch();
   toast('Transaction saved');
   await refreshCurrentView();
   attemptSync();
@@ -1327,9 +1368,11 @@ document.getElementById('form-client').addEventListener('submit', async (e) => {
     await db.clients.update(editingClientId, patch);
     toast('Client updated');
   } else {
+    const clientNumber = await getNextClientNumber();
     await db.clients.add({
       id: uid(), name, phone, location, loanEligible, hidden,
       photo: pendingPhoto || null,
+      clientNumber,
       createdAt: now, updatedAt: now, synced: false,
     });
     toast('Client added');
@@ -1340,7 +1383,7 @@ document.getElementById('form-client').addEventListener('submit', async (e) => {
   attemptSync();
 });
 
-document.getElementById('btn-back-client').addEventListener('click', () => showView('home'));
+document.getElementById('btn-back-client').addEventListener('click', () => showView('clients'));
 document.getElementById('client-loan-toggle').addEventListener('change', async (e) => {
   if (!currentClientId) return;
   await db.clients.update(currentClientId, { loanEligible: e.target.checked, updatedAt: new Date().toISOString(), synced: false });
@@ -1367,7 +1410,7 @@ async function openReceipt(txnId, phone) {
 
   document.getElementById('receipt-body').innerHTML = `
     <div class="flex justify-between"><span>Receipt ID</span><span>${receiptId}</span></div>
-    <div class="flex justify-between"><span>Client</span><span>${c ? c.name : ''}</span></div>
+    <div class="flex justify-between"><span>Client</span><span>${c ? c.name : ''} ${c ? `(${clientTag(c)})` : ''}</span></div>
     <div class="flex justify-between"><span>Date</span><span>${fmtDate(t.timestamp)}</span></div>
     <div class="flex justify-between"><span>Type</span><span>${meta.label}</span></div>
     <div class="flex justify-between font-semibold"><span>Amount</span><span>${fmtMoney(t.amount)}</span></div>
@@ -1491,7 +1534,7 @@ document.getElementById('btn-preview-pdf').addEventListener('click', async () =>
           <div style="display:flex;align-items:center;gap:10px;">
             <div>${avatar}</div>
             <div style="min-width:0;">
-              <div style="font-weight:700;font-size:13px;">${client?.name || 'Unknown client'}</div>
+              <div style="font-weight:700;font-size:13px;">${client?.name || 'Unknown client'} <span style="font-weight:400;color:#94a3b8;">${client ? clientTag(client) : ''}</span></div>
               <div style="font-size:11px;color:#64748b;">${client?.location || ''}</div>
             </div>
           </div>
@@ -1516,7 +1559,7 @@ document.getElementById('btn-preview-pdf').addEventListener('click', async () =>
       <div style="display:flex;gap:14px;align-items:center;">
         ${selectedClient?.photo ? `<img src="${selectedClient.photo}" style="width:78px;height:78px;border-radius:16px;object-fit:cover;">` : `<div style="width:78px;height:78px;border-radius:16px;background:#E8F7EE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0F9D74;font-size:24px;">${(selectedClient?.name || 'ALL').split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()}</div>`}
         <div>
-          <div style="font-weight:700;font-size:16px;">${selectedClient ? selectedClient.name : 'All clients'}</div>
+          <div style="font-weight:700;font-size:16px;">${selectedClient ? selectedClient.name : 'All clients'} ${selectedClient ? `<span style="font-weight:400;color:#94a3b8;font-size:12px;">${clientTag(selectedClient)}</span>` : ''}</div>
           <div style="font-size:12px;color:#64748b;">${selectedClient ? `Phone: ${selectedClient.phone || '—'}` : 'Combined account statement'}</div>
         </div>
       </div>
@@ -1571,6 +1614,8 @@ document.getElementById('btn-export-json').addEventListener('click', async () =>
       updatedAt: t.updatedAt || t.timestamp,
       client: {
         id: t.clientId,
+        clientNumber: c.clientNumber || null,
+        clientTag: c.clientNumber ? clientTag(c) : null,
         name: c.name || '',
         phone: c.phone || '',
         location: c.location || '',
@@ -1722,6 +1767,7 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
       { header: 'Time', key: 'time' },
       { header: 'Transaction ID', key: 'txId' },
       { header: 'Client ID', key: 'clientId' },
+      { header: 'Client Tag', key: 'clientTag' },
       { header: 'Client name', key: 'clientName' },
       { header: 'Phone', key: 'phone' },
       { header: 'Location', key: 'location' },
@@ -1741,6 +1787,7 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
         time: getTimeString(tDate),
         txId: t.id || '',
         clientId: t.clientId || '',
+        clientTag: c.clientNumber ? clientTag(c) : '',
         clientName: c.name || '',
         phone: formatGhanaPhone(c.phone), // Normalized formatting
         location: c.location || '',
@@ -1758,6 +1805,7 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
     const wsClients = workbook.addWorksheet('Clients');
     wsClients.columns = [
       { header: 'No.', key: 'no' },
+      { header: 'Client Tag', key: 'clientTag' },
       { header: 'Client ID', key: 'clientId' },
       { header: 'Name', key: 'name' },
       { header: 'Phone', key: 'phone' },
@@ -1776,6 +1824,7 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
       const uDate = c.updatedAt ? new Date(c.updatedAt) : null;
       wsClients.addRow({
         no: clientIndex++,
+        clientTag: c.clientNumber ? clientTag(c) : '',
         clientId: c.id || '',
         name: c.name || '',
         phone: formatGhanaPhone(c.phone), // Normalized formatting
@@ -1894,7 +1943,7 @@ document.getElementById('btn-export-pdf').addEventListener('click', async () => 
           <div style="display:flex;align-items:center;gap:10px;">
             <div>${avatar}</div>
             <div style="min-width:0;">
-              <div style="font-weight:700;font-size:13px;">${client?.name || 'Unknown client'}</div>
+              <div style="font-weight:700;font-size:13px;">${client?.name || 'Unknown client'} <span style="font-weight:400;color:#94a3b8;">${client ? clientTag(client) : ''}</span></div>
               <div style="font-size:11px;color:#64748b;">${client?.location || ''}</div>
             </div>
           </div>
@@ -1918,7 +1967,7 @@ document.getElementById('btn-export-pdf').addEventListener('click', async () => 
       <div style="display:flex;gap:14px;align-items:center;">
         ${selectedClient?.photo ? `<img src="${selectedClient.photo}" style="width:78px;height:78px;border-radius:16px;object-fit:cover;">` : `<div style="width:78px;height:78px;border-radius:16px;background:#E8F7EE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0F9D74;font-size:24px;">${(selectedClient?.name || 'ALL').split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()}</div>`}
         <div>
-          <div style="font-weight:700;font-size:16px;">${selectedClient ? selectedClient.name : 'All clients'}</div>
+          <div style="font-weight:700;font-size:16px;">${selectedClient ? selectedClient.name : 'All clients'} ${selectedClient ? `<span style="font-weight:400;color:#94a3b8;font-size:12px;">${clientTag(selectedClient)}</span>` : ''}</div>
           <div style="font-size:12px;color:#64748b;">${selectedClient ? `Phone: ${selectedClient.phone || '—'}` : 'Combined account statement'}</div>
         </div>
       </div>
@@ -2093,7 +2142,7 @@ document.getElementById('btn-backup-names').addEventListener('click', async () =
       generatedAt: new Date().toISOString(),
       total: clients.length,
       clients: clients.map(c => ({
-        id: c.id, name: c.name, phone: c.phone, location: c.location || '',
+        id: c.id, clientNumber: c.clientNumber || null, name: c.name, phone: c.phone, location: c.location || '',
         photo: c.photo || null, loanEligible: !!c.loanEligible, hidden: !!c.hidden,
         createdAt: c.createdAt, updatedAt: c.updatedAt,
       })),
@@ -2116,7 +2165,7 @@ document.getElementById('btn-backup-all').addEventListener('click', async () => 
       totalClients: clients.length,
       totalTransactions: transactions.length,
       clients: clients.map(c => ({
-        id: c.id, name: c.name, phone: c.phone, location: c.location || '',
+        id: c.id, clientNumber: c.clientNumber || null, name: c.name, phone: c.phone, location: c.location || '',
         photo: c.photo || null, loanEligible: !!c.loanEligible, hidden: !!c.hidden,
         createdAt: c.createdAt, updatedAt: c.updatedAt,
       })),
@@ -2152,6 +2201,7 @@ document.getElementById('backup-import-input').addEventListener('change', async 
         photo: c.photo || null,
         loanEligible: !!c.loanEligible,
         hidden: !!c.hidden,
+        clientNumber: c.clientNumber || undefined,
         createdAt: c.createdAt || now,
         updatedAt: now,
         synced: false,
@@ -2196,6 +2246,7 @@ document.getElementById('backup-import-input').addEventListener('change', async 
       return;
     }
 
+    await backfillClientNumbers();
     toast(`Imported ${importedClients} client(s) and ${importedTxns} transaction(s)`);
     await populateClientFilters();
     await refreshCurrentView();
@@ -2242,7 +2293,7 @@ async function renderSettings() {
     archivedList.innerHTML = archivedClients.map(c => `
       <div class="flex items-center justify-between gap-3 rounded-xl bg-white/70 dark:bg-ink-800/70 px-3 py-2">
         <div class="min-w-0">
-          <p class="text-sm font-medium truncate">${c.name}</p>
+          <p class="text-sm font-medium truncate">${c.name} <span class="text-[10px] text-ink-900/40 dark:text-paper/40 font-mono-num">${clientTag(c)}</span></p>
           <p class="text-[11px] text-ink-900/50 dark:text-paper/50 truncate">${c.location || 'Location not set'}</p>
         </div>
         <button data-restore-client="${c.id}" class="tap text-xs font-medium text-savings-600 dark:text-savings-500">Restore</button>
@@ -2375,11 +2426,13 @@ function initCloud() {
 }
 
 // Local (camelCase) <-> remote (snake_case) field mapping.
+// NOTE: if your Supabase "clients" table doesn't yet have a client_number column,
+// add one (integer, nullable) so client numbering also syncs across devices.
 function clientToRemote(c) {
-  return { id: c.id, name: c.name, phone: c.phone, photo: c.photo || null, location: c.location || null, hidden: !!c.hidden, loan_eligible: !!c.loanEligible, created_at: c.createdAt, updated_at: c.updatedAt || c.createdAt };
+  return { id: c.id, name: c.name, phone: c.phone, photo: c.photo || null, location: c.location || null, hidden: !!c.hidden, loan_eligible: !!c.loanEligible, client_number: c.clientNumber || null, created_at: c.createdAt, updated_at: c.updatedAt || c.createdAt };
 }
 function clientFromRemote(r) {
-  return { id: r.id, name: r.name, phone: r.phone, photo: r.photo || null, location: r.location || '', hidden: !!r.hidden, loanEligible: !!r.loan_eligible, createdAt: r.created_at, updatedAt: r.updated_at, synced: true };
+  return { id: r.id, name: r.name, phone: r.phone, photo: r.photo || null, location: r.location || '', hidden: !!r.hidden, loanEligible: !!r.loan_eligible, clientNumber: r.client_number || undefined, createdAt: r.created_at, updatedAt: r.updated_at, synced: true };
 }
 function txnToRemote(t) {
   return { id: t.id, client_id: t.clientId, type: t.type, amount: t.amount, note: t.note || '', timestamp: t.timestamp, updated_at: t.updatedAt || t.timestamp };
@@ -2496,7 +2549,7 @@ async function attemptSync(manual) {
 async function refreshCurrentView() {
   const active = document.querySelector('.view.active').id.replace('view-', '');
   if (active === 'client' && currentClientId) await openClient(currentClientId);
-  else showView(active === 'client' ? 'home' : active);
+  else showView(active === 'client' ? 'clients' : active);
 }
 
 (async function init() {
@@ -2504,8 +2557,10 @@ async function refreshCurrentView() {
   setOnlineBadge();
   initCloud();
   if (navigator.onLine && isCloudConfigured()) await pullFromCloud();
+  await backfillClientNumbers();
   await populateClientFilters();
   await renderHome();
+  await renderCharts();
   attemptSync();
   setInterval(attemptSync, 20000);
 })();
@@ -2688,60 +2743,6 @@ async function refreshCurrentView() {
   window.addEventListener('beforeunload', () => {
     sessionStorage.removeItem('ledgerAppAuth');
   });
-
-// 1. Disable Right-Click menu
-document.addEventListener('contextmenu', (event) => {
-    event.preventDefault();
-});
-
-// 2. Disable Zoom & Security Keyboard Shortcuts
-document.addEventListener('keydown', (event) => {
-    // Disable F12 (Inspect Element)
-    if (event.key === 'F12') {
-        event.preventDefault();
-        return false;
-    }
-
-    // Disable Ctrl+U (View Source) and Ctrl+Shift+I (Inspect)
-    if (event.ctrlKey && (event.key === 'u' || event.key === 'U' || (event.shiftKey && (event.key === 'i' || event.key === 'I')))) {
-        event.preventDefault();
-        return false;
-    }
-
-    // --- NEW: Disable Keyboard Zoom (Ctrl + Plus, Ctrl + Minus, Ctrl + Zero) ---
-    if (event.ctrlKey && (event.key === '+' || event.key === '=' || event.key === '-' || event.key === '0')) {
-        event.preventDefault();
-        return false;
-    }
-});
-
-// 3. --- NEW: Disable Mouse Wheel Zoom (Ctrl + Mouse Scroll) ---
-document.addEventListener('wheel', (event) => {
-    if (event.ctrlKey) {
-        event.preventDefault();
-    }
-}, { passive: false });
-
-
-// 1. Disable Right-Click menu
-document.addEventListener('contextmenu', (event) => {
-    event.preventDefault();
-});
-
-// 2. Disable Ctrl+U, F12, and Inspect Element shortcuts
-document.addEventListener('keydown', (event) => {
-    // Disable F12
-    if (event.key === 'F12') {
-        event.preventDefault();
-        return false;
-    }
-
-    // Disable Ctrl+U (View Source) and Ctrl+Shift+I (Inspect)
-    if (event.ctrlKey && (event.key === 'u' || event.key === 'U' || (event.shiftKey && (event.key === 'i' || event.key === 'I')))) {
-        event.preventDefault();
-        return false;
-    }
-});
 </script>
 </body>
 </html>
