@@ -355,7 +355,7 @@
           </button>
         </div>
         <div class="flex items-center gap-2">
-          <input id="client-search" type="text" placeholder="Search clients by name, phone, or location" class="tap flex-1 text-sm rounded-xl px-3 bg-ink-50 dark:bg-ink-700 border border-ink-100 dark:border-ink-700">
+          <input id="client-search" type="text" placeholder="Search by name, phone, location, or ID (e.g. UA_24 or 24)" class="tap flex-1 text-sm rounded-xl px-3 bg-ink-50 dark:bg-ink-700 border border-ink-100 dark:border-ink-700">
           <button id="btn-sort-clients" class="tap rounded-xl border border-ink-100 dark:border-ink-700 px-3 text-sm font-medium whitespace-nowrap">A→Z</button>
         </div>
       </div>
@@ -869,11 +869,17 @@ async function renderClients() {
 
   if (clientSearchTerm.trim()) {
     const q = clientSearchTerm.trim().toLowerCase();
-    clients = clients.filter(c =>
-      (c.name || '').toLowerCase().includes(q) ||
-      (c.phone || '').toLowerCase().includes(q) ||
-      (c.location || '').toLowerCase().includes(q)
-    );
+    // Accept plain numbers ("24"), the bare tag ("ua_24" / "ua24"), or any partial match of it.
+    const qDigits = q.replace(/\D/g, '');
+    clients = clients.filter(c => {
+      const tag = clientTag(c).toLowerCase(); // e.g. "ua_24"
+      const numStr = c.clientNumber ? String(c.clientNumber) : '';
+      return (c.name || '').toLowerCase().includes(q) ||
+        (c.phone || '').toLowerCase().includes(q) ||
+        (c.location || '').toLowerCase().includes(q) ||
+        tag.includes(q) ||
+        (qDigits && numStr.includes(qDigits));
+    });
   }
 
   clients.sort((a, b) => {
