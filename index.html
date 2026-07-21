@@ -205,6 +205,151 @@
   .login-error { min-height: 20px; margin-top: 10px; color: #D0503A; font-size: 13px; font-weight: 600; }
   .login-card.shake { animation: login-shake 0.35s ease-in-out; }
   @keyframes login-shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-7px)} 50%{transform:translateX(7px)} 75%{transform:translateX(-4px)} }
+
+  /* =====================================================================
+     iOS "Phone / Contacts" style system
+     Light theme mirrors iOS systemBackground / secondaryLabel / systemBlue.
+     Dark theme mirrors iOS true-black systemBackground + elevated groups.
+  ===================================================================== */
+  :root{
+    --ios-bg:#FFFFFF;
+    --ios-grouped-bg:#F2F2F7;
+    --ios-card:#FFFFFF;
+    --ios-separator:rgba(60,60,67,0.29);
+    --ios-label:#000000;
+    --ios-label-2:rgba(60,60,67,0.6);
+    --ios-label-3:rgba(60,60,67,0.35);
+    --ios-blue:#007AFF;
+    --ios-red:#FF3B30;
+    --ios-green:#34C759;
+    --ios-index:#8E8E93;
+    --ios-search-bg:rgba(118,118,128,0.12);
+    --ios-fab-shadow:0 8px 20px rgba(0,122,255,0.35);
+  }
+  .dark{
+    --ios-bg:#000000;
+    --ios-grouped-bg:#000000;
+    --ios-card:#1C1C1E;
+    --ios-separator:rgba(84,84,88,0.65);
+    --ios-label:#FFFFFF;
+    --ios-label-2:rgba(235,235,245,0.6);
+    --ios-label-3:rgba(235,235,245,0.3);
+    --ios-blue:#0A84FF;
+    --ios-red:#FF453A;
+    --ios-green:#30D158;
+    --ios-index:#8E8E93;
+    --ios-search-bg:rgba(118,118,128,0.24);
+    --ios-fab-shadow:0 8px 20px rgba(10,132,255,0.4);
+  }
+
+  /* ---- Search bar (iOS pill) ---- */
+  .ios-searchbar-wrap{ position:relative; }
+  .ios-searchbar{
+    width:100%; height:36px; border-radius:10px; border:none; outline:none;
+    background:var(--ios-search-bg); color:var(--ios-label);
+    font-size:15px; padding:0 12px 0 32px; font-family:'Inter',sans-serif;
+  }
+  .ios-searchbar::placeholder{ color:var(--ios-label-2); }
+  .ios-searchbar-icon{
+    position:absolute; left:9px; top:50%; transform:translateY(-50%);
+    color:var(--ios-label-2); pointer-events:none;
+  }
+
+  /* ---- Contacts list shell with side index ---- */
+  .ios-contacts-shell{ position:relative; background:var(--ios-grouped-bg); }
+  .ios-list{ background:var(--ios-bg); }
+  .ios-section-header{
+    position:sticky; top:0; z-index:5;
+    font-family:'Inter',sans-serif; font-weight:700; font-size:13px;
+    color:var(--ios-index); background:var(--ios-grouped-bg);
+    padding:3px 12px 3px 16px;
+  }
+  .dark .ios-section-header{ color:var(--ios-index); }
+  .ios-row{
+    display:flex; align-items:center; gap:12px; width:100%;
+    padding:8px 12px 8px 16px; background:var(--ios-card);
+    border-bottom:1px solid var(--ios-separator);
+    text-align:left; min-height:58px;
+  }
+  .ios-row:active{ background:var(--ios-search-bg); }
+  .ios-row-name{ font-size:17px; font-weight:400; color:var(--ios-label); line-height:1.25; }
+  .ios-row-sub{ font-size:13px; color:var(--ios-label-2); margin-top:1px; }
+  .ios-chevron{ color:var(--ios-label-3); font-size:15px; margin-left:auto; padding-left:6px; }
+
+  .ios-avatar{
+    width:40px; height:40px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font-family:'Inter',sans-serif; font-weight:600; font-size:15px;
+    object-fit:cover;
+  }
+  .ios-avatar-lg{
+    width:104px; height:104px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font-family:'Inter',sans-serif; font-weight:600; font-size:38px;
+    object-fit:cover; box-shadow:0 6px 18px rgba(0,0,0,0.18);
+  }
+
+  /* ---- A-Z index scrubber (right edge) ---- */
+  .ios-index-bar{
+    position:fixed; right:2px; top:50%; transform:translateY(-50%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:25; padding:4px 3px; border-radius:14px;
+    user-select:none; -webkit-user-select:none; touch-action:none;
+  }
+  .ios-index-bar button{
+    background:none; border:none; padding:0; margin:0;
+    font-size:11px; font-weight:600; color:var(--ios-blue);
+    line-height:1.35; width:16px; text-align:center; cursor:pointer;
+  }
+  .ios-index-bubble{
+    position:fixed; right:26px; z-index:30; width:64px; height:64px;
+    border-radius:50%; background:rgba(120,120,128,0.82); backdrop-filter:blur(6px);
+    color:#fff; font-size:28px; font-weight:600; display:none;
+    align-items:center; justify-content:center; pointer-events:none;
+  }
+
+  /* ---- Floating add button (iOS "+" style) ---- */
+  .ios-fab{
+    position:fixed; z-index:26; width:52px; height:52px; border-radius:50%;
+    background:var(--ios-blue); color:#fff; display:flex; align-items:center; justify-content:center;
+    box-shadow:var(--ios-fab-shadow); font-size:26px; font-weight:400; line-height:0;
+  }
+
+  /* ---- Contact detail / profile page ---- */
+  .ios-profile-card{ background:var(--ios-grouped-bg); }
+  .ios-profile-header{ display:flex; flex-direction:column; align-items:center; padding:18px 16px 8px; text-align:center; }
+  .ios-profile-name{ font-family:'Inter',sans-serif; font-weight:600; font-size:22px; color:var(--ios-label); margin-top:12px; }
+  .ios-profile-sub{ font-size:14px; color:var(--ios-label-2); margin-top:2px; }
+  .ios-action-row{ display:flex; gap:0; justify-content:center; margin:18px 0 6px; width:100%; max-width:360px; }
+  .ios-action-btn{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; background:none; border:none;
+  }
+  .ios-action-icon{
+    width:56px; height:56px; border-radius:50%; background:var(--ios-blue); color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:22px;
+  }
+  .ios-action-label{ font-size:12px; color:var(--ios-blue); font-weight:500; }
+
+  .ios-group{ background:var(--ios-card); border-radius:12px; overflow:hidden; margin:0 16px 18px; }
+  .ios-group-row{
+    padding:9px 14px; border-bottom:1px solid var(--ios-separator);
+  }
+  .ios-group-row:last-child{ border-bottom:none; }
+  .ios-group-label{ font-size:12.5px; color:var(--ios-label-2); margin-bottom:1px; }
+  .ios-group-value{ font-size:16px; color:var(--ios-label); }
+  .ios-group-value.link{ color:var(--ios-blue); }
+  .ios-group-row.flex-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+
+  .ios-section-title{
+    font-size:13px; font-weight:700; color:var(--ios-index); text-transform:uppercase;
+    letter-spacing:0.02em; margin:0 16px 6px;
+  }
+
+  .ios-timeline-item{
+    display:flex; align-items:center; gap:12px; padding:10px 14px;
+    border-bottom:1px solid var(--ios-separator);
+  }
+  .ios-timeline-item:last-child{ border-bottom:none; }
 </style>
 </head>
 <body class="text-ink-900 dark:text-paper">
@@ -344,60 +489,89 @@
       </div>
     </section>
 
-    <!-- ---------- CLIENTS (list, add, search) ---------- -->
-    <section id="view-clients" class="view px-4 pt-4">
-      <div class="sticky top-16 z-20 -mx-4 px-4 pt-3 pb-3 bg-paper/95 dark:bg-ink-900/95 backdrop-blur border-b border-ink-100 dark:border-ink-700 space-y-3">
-        <h2 class="font-display font-semibold text-lg">Clients</h2>
-        <div class="grid grid-cols-2 gap-2">
-          <button id="btn-add-client" class="tap rounded-xl border border-ledger-500 text-ledger-500 dark:text-ledger-500 text-sm font-medium">+ Add client</button>
-          <button id="btn-new-txn" class="tap rounded-xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 text-sm font-medium flex items-center justify-center gap-1">
-            <span class="text-base leading-none">+</span> Record transaction
-          </button>
+    <!-- ---------- CLIENTS (iOS Contacts-style list, add, search) ---------- -->
+    <section id="view-clients" class="view ios-contacts-shell !px-0 pt-0" style="margin:0 -1rem;">
+      <div class="sticky top-16 z-20 px-4 pt-3 pb-2" style="background:var(--ios-bg);">
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="font-display font-bold" style="font-size:28px; color:var(--ios-label);">Clients</h2>
+          <div class="flex items-center gap-4">
+            <button id="btn-new-txn" class="text-sm font-medium" style="color:var(--ios-blue);" title="Record transaction">New txn</button>
+            <button id="btn-add-client" class="w-8 h-8 rounded-full flex items-center justify-center" style="background:var(--ios-blue); color:#fff;" aria-label="Add client" title="Add client">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+            <button id="btn-sort-clients" class="hidden">A→Z</button>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
-          <input id="client-search" type="text" placeholder="Search by name, phone, location, or ID (e.g. UA_24 or 24)" class="tap flex-1 text-sm rounded-xl px-3 bg-ink-50 dark:bg-ink-700 border border-ink-100 dark:border-ink-700">
-          <button id="btn-sort-clients" class="tap rounded-xl border border-ink-100 dark:border-ink-700 px-3 text-sm font-medium whitespace-nowrap">A→Z</button>
+        <div class="ios-searchbar-wrap">
+          <span class="ios-searchbar-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </span>
+          <input id="client-search" type="text" placeholder="Search" class="ios-searchbar">
         </div>
       </div>
-      <div id="client-list" class="space-y-2 pt-3"></div>
+      <div id="client-list-scope" class="relative">
+        <div id="client-list" class="ios-list"></div>
+        <nav id="client-index-bar" class="ios-index-bar"></nav>
+        <div id="client-index-bubble" class="ios-index-bubble"></div>
+      </div>
     </section>
 
-    <!-- ---------- CLIENT PROFILE ---------- -->
-    <section id="view-client" class="view px-4 pt-4 space-y-4">
-      <div class="flex items-center justify-between">
-        <button id="btn-back-client" class="text-sm text-ledger-500 font-medium">&larr; Done (back to clients)</button>
-        <button id="btn-edit-client" class="text-sm text-ledger-500 font-medium">Edit profile</button>
+    <!-- ---------- CLIENT PROFILE (iOS Contact detail style) ---------- -->
+    <section id="view-client" class="view ios-profile-card !px-0 pt-0 space-y-0" style="margin:0 -1rem;">
+      <div class="flex items-center justify-between px-4 pt-2 pb-1" style="background:var(--ios-grouped-bg);">
+        <button id="btn-back-client" class="text-[17px] font-medium flex items-center gap-0.5" style="color:var(--ios-blue);">
+          <svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2L2 10l8 8"/></svg>
+          Clients
+        </button>
+        <button id="btn-edit-client" class="text-[17px] font-medium" style="color:var(--ios-blue);">Edit</button>
       </div>
-      <div id="client-profile-header" class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4"></div>
-      <div class="grid grid-cols-2 gap-3">
-        <div class="rounded-2xl border border-savings-500/30 bg-savings-500/10 p-4">
-          <p class="text-xs font-medium text-savings-600 dark:text-savings-500">Savings balance</p>
-          <p id="client-savings-total" class="font-mono-num text-lg font-semibold mt-1">GH₵0.00</p>
-        </div>
-        <div class="rounded-2xl border border-loan-500/30 bg-loan-500/10 p-4">
-          <p class="text-xs font-medium text-loan-600 dark:text-loan-500">Active debt</p>
-          <p id="client-loan-total" class="font-mono-num text-lg font-semibold mt-1">GH₵0.00</p>
-        </div>
+
+      <div id="client-profile-header" class="ios-profile-header"></div>
+
+      <div class="ios-action-row mx-auto">
+        <button id="btn-client-call" class="ios-action-btn" title="Call">
+          <span class="ios-action-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1.1L6.6 10.8z"/></svg></span>
+          <span class="ios-action-label">Call</span>
+        </button>
+        <button id="btn-client-message" class="ios-action-btn" title="Message">
+          <span class="ios-action-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2H8l-4 4V6c0-1.1.9-2 2-2z" opacity="0"/><path d="M12 3C6.5 3 2 6.6 2 11c0 2.4 1.3 4.5 3.4 6L4 21l4.4-1.7c1.1.3 2.3.5 3.6.5 5.5 0 10-3.6 10-8S17.5 3 12 3z"/></svg></span>
+          <span class="ios-action-label">Message</span>
+        </button>
+        <button id="btn-client-add-txn" class="ios-action-btn" title="Add transaction">
+          <span class="ios-action-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+          <span class="ios-action-label">Add txn</span>
+        </button>
       </div>
-      <button id="btn-client-add-txn" class="tap w-full rounded-2xl bg-ink-900 dark:bg-paper text-paper dark:text-ink-900 font-medium flex items-center justify-center gap-2">
-        <span class="text-lg leading-none">+</span> Add transaction for this client
-      </button>
-      <div class="rounded-2xl bg-ink-50 dark:bg-ink-700 p-4 flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium">Loan eligibility</p>
-          <p class="text-xs text-ink-900/60 dark:text-paper/60">Allows loan disbursal for this client</p>
-        </div>
-        <label class="relative inline-flex items-center cursor-pointer">
-          <input id="client-loan-toggle" type="checkbox" class="sr-only peer">
-          <div class="switch switch-track relative bg-ink-100 dark:bg-ink-800 rounded-full transition-colors">
-            <div class="switch-dot absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow"></div>
+
+      <p class="ios-section-title mt-3">Account</p>
+      <div class="ios-group">
+        <div class="ios-group-row flex-row">
+          <div>
+            <p class="ios-group-label">Savings balance</p>
+            <p id="client-savings-total" class="ios-group-value font-mono-num" style="color:var(--ios-green);">GH₵0.00</p>
           </div>
-        </label>
+          <div class="text-right">
+            <p class="ios-group-label">Active debt</p>
+            <p id="client-loan-total" class="ios-group-value font-mono-num" style="color:var(--ios-red);">GH₵0.00</p>
+          </div>
+        </div>
+        <div class="ios-group-row flex-row">
+          <div>
+            <p class="ios-group-value">Loan eligibility</p>
+            <p class="ios-group-label">Allows loan disbursal for this client</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input id="client-loan-toggle" type="checkbox" class="sr-only peer">
+            <div class="switch switch-track relative bg-ink-100 dark:bg-ink-800 rounded-full transition-colors">
+              <div class="switch-dot absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow"></div>
+            </div>
+          </label>
+        </div>
       </div>
-      <div>
-        <h3 class="font-display font-semibold text-base mb-2">Transaction timeline</h3>
-        <div id="client-timeline" class="space-y-2"></div>
-      </div>
+
+      <p class="ios-section-title">Transaction timeline</p>
+      <div id="client-timeline" class="ios-group"></div>
+      <div class="h-4"></div>
     </section>
 
     <!-- ---------- TRANSACTIONS / LEDGER ---------- -->
@@ -2282,9 +2456,8 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
    SETTINGS
 ========================================================================= */
 async function renderSettings() {
-  const looksOnline = navigator.onLine || supabaseConnected;
-  document.getElementById('settings-online').textContent = looksOnline ? 'Online' : 'Offline';
-  document.getElementById('settings-online').className = 'text-sm font-medium ' + (looksOnline ? 'text-savings-500' : 'text-alert-500');
+  document.getElementById('settings-online').textContent = navigator.onLine ? 'Online' : 'Offline';
+  document.getElementById('settings-online').className = 'text-sm font-medium ' + (navigator.onLine ? 'text-savings-500' : 'text-alert-500');
   const pendingT = await db.transactions.filter(t => !t.synced).count();
   const pendingC = await db.clients.filter(c => !c.synced).count();
   document.getElementById('settings-pending').textContent = pendingT + pendingC;
@@ -2398,10 +2571,7 @@ document.getElementById('btn-reset-data').addEventListener('click', async () => 
 ========================================================================= */
 function setOnlineBadge() {
   const badge = document.getElementById('online-badge');
-  // Trust an actual successful cloud probe (supabaseConnected) over navigator.onLine,
-  // since that flag can be wrong in some mobile browsers/WebViews/PWAs.
-  const looksOnline = navigator.onLine || supabaseConnected;
-  if (looksOnline) {
+  if (navigator.onLine) {
     if (isCloudConfigured()) {
       if (supabaseConnected) {
         badge.textContent = '● Online — synced';
@@ -2513,26 +2683,15 @@ function subscribeRealtime() {
 
 let syncing = false;
 async function attemptSync(manual) {
-  // NOTE: we deliberately do NOT gate this on navigator.onLine. That flag is
-  // unreliable in a lot of mobile browsers, in-app WebViews, and installed PWAs —
-  // it can report false even while the device has a perfectly good connection.
-  // Instead we trust the actual network probe below (verifyCloudConnection),
-  // which really talks to Supabase, to decide whether we're reachable.
-  if (syncing) { if (manual) toast('A sync is already in progress…'); return; }
+  if (!navigator.onLine || syncing) { if (manual) toast('Still offline — will sync automatically.'); return; }
   if (!isCloudConfigured()) { if (manual) toast('Connect a cloud project in Settings to enable multi-device sync.'); return; }
   if (!supabaseClient) initCloud();
   if (!supabaseClient) { if (manual) toast('Cloud sync is not available yet.'); return; }
   const connected = await verifyCloudConnection();
   setOnlineBadge();
   if (!connected) {
-    if (manual) {
-      if (!navigator.onLine) {
-        toast('Still offline — will sync automatically once connected.');
-      } else {
-        const message = supabaseConnectionError?.message || 'Unknown error';
-        toast(`Cloud project not reachable: ${message}`);
-      }
-    }
+    const message = supabaseConnectionError?.message || 'Unknown error';
+    if (manual) toast(`Cloud project not reachable: ${message}`);
     console.error('Supabase connection error:', supabaseConnectionError);
     return;
   }
